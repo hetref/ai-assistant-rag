@@ -1,14 +1,3 @@
-<p align="center" class="flex items-center gap-1 justify-center flex-wrap">
-    <img src="../../../assets/gcp-logo.svg?raw=true" alt="GCP Logo" height="20" width="20">
-    <a href="https://pathway.com/developers/user-guide/deployment/gcp-deploy">Deploy with GCP</a> |
-    <img src="../../../assets/aws-fargate-logo.svg?raw=true" alt="AWS Logo" height="20" width="20">
-    <a href="https://pathway.com/developers/user-guide/deployment/aws-fargate-deploy">Deploy with AWS</a> |
-    <img src="../../../assets/azure-logo.svg?raw=true" alt="Azure Logo" height="20" width="20">
-    <a href="https://pathway.com/developers/user-guide/deployment/azure-aci-deploy">Deploy with Azure</a> |
-    <img src="../../../assets/render.png?raw=true" alt="Render Logo" height="20" width="20">
-    <a href="https://pathway.com/developers/user-guide/deployment/render-deploy"> Deploy with Render </a>
-</p>
-
 # Pathway RAG app with always up-to-date knowledge
 
 This demo shows how to create a real-time RAG application using [Pathway](https://github.com/pathwaycom/pathway) that provides always up-to-date knowledge to your LLM without the need for a separate ETL. 
