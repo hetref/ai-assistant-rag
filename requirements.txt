@@ -1,0 +1,6 @@
+pathway[all]
+python-dotenv~=1.0
+mpmath~=1.3
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
