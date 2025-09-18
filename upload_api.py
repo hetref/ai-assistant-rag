@@ -281,14 +281,14 @@ def search_businesses_vectorized(
             timeout=10
         )
         
-        print("RETRIEVED DATA for RESULTS", retrieve_response.json())
+        # print("RETRIEVED DATA for RESULTS", retrieve_response.json())
         
         if retrieve_response.status_code != 200:
             logger.error(f"Pathway retrieve failed: {retrieve_response.status_code}")
             return [], "vectorized_error"
         
         retrieve_data = retrieve_response.json()
-        print("RETRIEVED DATA", retrieve_data)
+        # print("RETRIEVED DATA", retrieve_data)
         
         # If Pathway returns empty data, just return empty vectorized result
         if not retrieve_data:
@@ -303,7 +303,7 @@ def search_businesses_vectorized(
             
             # Parse businesses from the text
             businesses = parse_business_from_text(text)
-            print("BUSINESSES", businesses)
+            # print("BUSINESSES", businesses)
             
             # Add vector similarity score to each business
             for business in businesses:
@@ -311,7 +311,7 @@ def search_businesses_vectorized(
                 business["source_path"] = metadata.get("path", "")
             
             all_businesses.extend(businesses)
-            print("ALL BUSINESSES", all_businesses)
+            # print("ALL BUSINESSES", all_businesses)
         # Step 3: Remove duplicates (same business appearing multiple times)
         unique_businesses = {}
         for business in all_businesses:
