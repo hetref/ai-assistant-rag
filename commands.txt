@@ -1,0 +1,5 @@
+Run Pathway Server + FastAPI Server
+python3 app.py
+
+Start Streamlit Server
+streamlit run main.py --server.port 8501

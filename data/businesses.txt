@@ -1,0 +1,44 @@
+Business Directory
+
+Business: Dev Ally
+Owner: Aryan Shinde
+Category: Cafe
+Location: 19.07609,72.877426
+Tags: coffee,espresso,tea,space
+Description: Dev Ally is a cafe owned by Aryan Shinde offering services related to coffee,espresso,tea,space.
+
+Business: Smith Coffee House
+Owner: John Smith
+Category: Cafe
+Location: 37.7749,-122.4194
+Tags: coffee,wifi,outdoor-seating
+Description: Smith Coffee House is a cafe owned by John Smith offering services related to coffee,wifi,outdoor-seating.
+
+Business: Garcia Italian Restaurant
+Owner: Maria Garcia
+Category: Restaurant
+Location: 40.7128,-74.0060
+Tags: italian,pasta,pizza
+Description: Garcia Italian Restaurant is a restaurant owned by Maria Garcia offering services related to italian,pasta,pizza.
+
+Business: Auto Service Center
+Owner: David Lee
+Category: Auto Service
+Location: 34.0522,-118.2437
+Tags: car,repair,maintenance
+Description: Auto Service Center is a auto service owned by David Lee offering services related to car,repair,maintenance.
+
+Business: City Pharmacy
+Owner: Sarah Johnson
+Category: Pharmacy
+Location: 25.7617,-80.1918
+Tags: medicine,health,prescriptions
+Description: City Pharmacy is a pharmacy owned by Sarah Johnson offering services related to medicine,health,prescriptions.
+
+Business: Hassan Electronics
+Owner: Ahmed Hassan
+Category: Electronics
+Location: 51.5074,-0.1278
+Tags: gadgets,phones,computers
+Description: Hassan Electronics is a electronics owned by Ahmed Hassan offering services related to gadgets,phones,computers.
+
