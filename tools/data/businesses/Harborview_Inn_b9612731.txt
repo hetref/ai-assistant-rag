@@ -1,0 +1,7 @@
+business_name: Harborview Inn
+owner_name: Emily Brown
+business_category: Hotel
+business_tags: ocean-view,breakfast,wifi
+latitude: 48.4284
+longitude: -123.3656
+lat_long: 48.4284,-123.3656

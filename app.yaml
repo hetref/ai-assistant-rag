@@ -10,9 +10,9 @@
 # https://pathway.com/developers/templates/yaml-examples/data-sources-examples
 
 $sources:
-  # File System connector, reading data locally.
+  # File System connector, reading only per-business text docs for one-vector-per-business.
   - !pw.io.fs.read
-    path: data
+    path: data/businesses
     format: binary
     with_metadata: true
 
@@ -55,22 +55,28 @@ $llm: !pw.xpacks.llm.llms.OpenAIChat
 
 # Specifies the embedder model for converting text into embeddings.
 $embedder: !pw.xpacks.llm.embedders.OpenAIEmbedder
-  model: "text-embedding-ada-002"
+  model: "text-embedding-3-small"
   cache_strategy: !pw.udfs.DefaultCache {}
 
 # Defines the splitter settings for dividing text into smaller chunks.
 $splitter: !pw.xpacks.llm.splitters.TokenCountSplitter
-  max_tokens: 400
+  max_tokens: 60
 
 # Configures the parser for processing and extracting information from documents.
-$parser: !pw.xpacks.llm.parsers.DoclingParser
-  async_mode: "fully_async"
+$parser: !pw.xpacks.llm.parsers.ParseUnstructured
 
 # Sets up the retriever factory for indexing and retrieving documents.
-$retriever_factory: !pw.stdlib.indexing.UsearchKnnFactory
+$knn_index: !pw.stdlib.indexing.UsearchKnnFactory
   reserved_space: 1000
   embedder: $embedder
   metric: !pw.stdlib.indexing.USearchMetricKind.COS
+
+$bm25_index: !pw.stdlib.indexing.TantivyBM25Factory
+
+$retriever_factory: !pw.stdlib.indexing.HybridIndexFactory
+  retriever_factories:
+    - $knn_index
+    - $bm25_index
   
 # Manages the storage and retrieval of documents for the RAG template.
 $document_store: !pw.xpacks.llm.document_store.DocumentStore

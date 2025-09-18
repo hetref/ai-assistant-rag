@@ -1,0 +1,7 @@
+business_name: Hassan Electronics
+owner_name: Ahmed Hassan
+business_category: Electronics
+business_tags: gadgets,phones,computers
+latitude: 51.5074
+longitude: -0.1278
+lat_long: 51.5074,-0.1278

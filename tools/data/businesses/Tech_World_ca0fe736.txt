@@ -1,0 +1,7 @@
+business_name: Tech World
+owner_name: Noah Williams
+business_category: Electronics
+business_tags: laptops,phones,accessories
+latitude: 34.6937
+longitude: 135.5023
+lat_long: 34.6937,135.5023

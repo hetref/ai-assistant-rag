@@ -1,0 +1,7 @@
+business_name: Lotus Café
+owner_name: Raj Patel
+business_category: Cafe
+business_tags: chai,vegan-friendly,relax
+latitude: 28.6139
+longitude: 77.209
+lat_long: 28.6139,77.2090

@@ -1,0 +1,7 @@
+business_name: Auto Service Center
+owner_name: David Lee
+business_category: Auto Service
+business_tags: car,repair,maintenance
+latitude: 34.0522
+longitude: -118.2437
+lat_long: 34.0522,-118.2437

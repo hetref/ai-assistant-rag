@@ -1,44 +1,26 @@
-Business Directory
-
-Business: Dev Ally
-Owner: Aryan Shinde
-Category: Cafe
-Location: 19.07609,72.877426
-Tags: coffee,espresso,tea,space
-Description: Dev Ally is a cafe owned by Aryan Shinde offering services related to coffee,espresso,tea,space.
-
-Business: Smith Coffee House
-Owner: John Smith
-Category: Cafe
-Location: 37.7749,-122.4194
-Tags: coffee,wifi,outdoor-seating
-Description: Smith Coffee House is a cafe owned by John Smith offering services related to coffee,wifi,outdoor-seating.
-
-Business: Garcia Italian Restaurant
-Owner: Maria Garcia
-Category: Restaurant
-Location: 40.7128,-74.0060
-Tags: italian,pasta,pizza
-Description: Garcia Italian Restaurant is a restaurant owned by Maria Garcia offering services related to italian,pasta,pizza.
-
-Business: Auto Service Center
-Owner: David Lee
-Category: Auto Service
-Location: 34.0522,-118.2437
-Tags: car,repair,maintenance
-Description: Auto Service Center is a auto service owned by David Lee offering services related to car,repair,maintenance.
-
-Business: City Pharmacy
-Owner: Sarah Johnson
-Category: Pharmacy
-Location: 25.7617,-80.1918
-Tags: medicine,health,prescriptions
-Description: City Pharmacy is a pharmacy owned by Sarah Johnson offering services related to medicine,health,prescriptions.
-
-Business: Hassan Electronics
-Owner: Ahmed Hassan
-Category: Electronics
-Location: 51.5074,-0.1278
-Tags: gadgets,phones,computers
-Description: Hassan Electronics is a electronics owned by Ahmed Hassan offering services related to gadgets,phones,computers.
-
+name,business_name,lat,lon,business_category,business_tags
+Hotel Admin,Seaside Hotel,37.7549,-122.4394,Hotel,wifi,beach,bar
+Aryan Shinde,Dev Ally,19.07609,72.877426,Cafe,"coffee,espresso,tea,space"
+John Smith,Smith Coffee House,37.7749,-122.4194,Cafe,"coffee,wifi,outdoor-seating"
+Maria Garcia,Garcia Italian Restaurant,40.7128,-74.0060,Restaurant,"italian,pasta,pizza"
+David Lee,Auto Service Center,34.0522,-118.2437,Auto Service,"car,repair,maintenance"
+Sarah Johnson,City Pharmacy,25.7617,-80.1918,Pharmacy,"medicine,health,prescriptions"
+Ahmed Hassan,Hassan Electronics,51.5074,-0.1278,Electronics,"gadgets,phones,computers"
+Emily Brown,Harborview Inn,48.4284,-123.3656,Hotel,"ocean-view,breakfast,wifi"
+Raj Patel,Lotus Café,28.6139,77.2090,Cafe,"chai,vegan-friendly,relax"
+Sophia Kim,Bella Trattoria,41.9028,12.4964,Restaurant,"italian,wine,pasta"
+Carlos Ruiz,Ruiz Auto Repair,29.7604,-95.3698,Auto Service,"oil-change,tires,brakes"
+Hannah Wright,WellCare Pharmacy,35.6895,139.6917,Pharmacy,"supplements,healthcare,meds"
+Liam O’Connor,Highland Hotel,55.9533,-3.1883,Hotel,"historic,fireplace,bar"
+Mei Ling,Golden Dragon Restaurant,22.3193,114.1694,Restaurant,"chinese,dimsum,noodles"
+Olivia Turner,Brooklyn Beans,40.6782,-73.9442,Cafe,"latte,study-spot,free-wifi"
+Ethan Carter,Metro Motors,39.9526,-75.1652,Auto Service,"diagnostics,engines,tires"
+Isabella Rossi,Rossi Pharmacy,45.4642,9.1900,Pharmacy,"prescriptions,beauty,health"
+Noah Williams,Tech World,34.6937,135.5023,Electronics,"laptops,phones,accessories"
+Chloe Davis,Sunset Resort,36.1699,-115.1398,Hotel,"pool,casino,spa"
+Victor Hernandez,Espresso Central,43.6532,-79.3832,Cafe,"espresso,sandwiches,cozy"
+Emma Lopez,La Fiesta Grill,19.4326,-99.1332,Restaurant,"mexican,tacos,salsa"
+Benjamin Scott,Scott’s Auto Hub,33.4484,-112.0740,Auto Service,"repair,transmission,ac-service"
+Ava Martinez,GreenLife Pharmacy,37.3382,-121.8863,Pharmacy,"organic,vitamins,medication"
+Yuki Tanaka,FutureTech Electronics,35.6762,139.6503,Electronics,"gaming,headphones,smartphones"
+Sarah John,Moms Khana,19.07809,72.878426,Restaurant,food,daal,bhaji,rice,chapati,puri
