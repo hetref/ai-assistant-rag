@@ -1,0 +1,7 @@
+business_name: Test Coffee Shop
+owner_name: Test User
+business_category: Cafe
+business_tags: coffee,test
+latitude: 37.7749
+longitude: -122.4194
+lat_long: 37.7749,-122.4194

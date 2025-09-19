@@ -1,1 +1,0 @@
-name,business_name,lat,lon,business_category,business_tags

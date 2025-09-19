@@ -1,416 +1,455 @@
-# Pathway RAG app with always up-to-date knowledge
+# Business Location RAG System
 
-This demo shows how to create a real-time RAG application using [Pathway](https://github.com/pathwaycom/pathway) that provides always up-to-date knowledge to your LLM without the need for a separate ETL. 
+A real-time business registration and location-based search system powered by [Pathway](https://github.com/pathwaycom/pathway) RAG (Retrieval-Augmented Generation) with AI-powered vectorized search capabilities.
 
-You can have a preview of the demo [here](https://pathway.com/solutions/ai-pipelines).
+## 🌟 Overview
 
-You will see a running example of how to get started with the Pathway vector store that eliminates the need for ETL pipelines which are needed in the regular VectorDBs. 
-This significantly reduces the developer's workload.
+This system combines the power of Pathway's real-time document indexing with location-based business search, providing:
 
-This demo allows you to:
+- **🏢 Business Registration**: Register businesses with location data and automatic indexing
+- **🗺️ Location-Based Search**: Find businesses using GPS coordinates with distance filtering
+- **🤖 AI-Powered Search**: Semantic search using OpenAI embeddings for intelligent matching
+- **📱 Modern UI**: Streamlit-based interface with geolocation support
+- **⚡ Real-Time Updates**: Automatic document reindexing when new businesses are added
 
-- Create a Document store with real-time document indexing from Google Drive, Microsoft 365 SharePoint, or a local directory;
-- Connect an OpenAI LLM model of choice to your knowledge base;
-- Get quality, accurate, and precise responses to your questions;
-- Ask questions about folders, files or all your documents easily, with the help of filtering options;
-- Use LLMs over API to summarize texts;
-- Get an executive outlook for a question on different files to easily access available knowledge in your documents;
+## 🏗️ Architecture
 
+### Core Components
 
-Note: This app relies on [Document Store](https://pathway.com/developers/api-docs/pathway-xpacks-llm/document_store) to learn more, you can check out [this blog post](https://pathway.com/developers/user-guide/llm-xpack/docs-indexing).
+1. **Pathway RAG Server** (Port 8000): Document indexing and vector search
+2. **FastAPI Upload Server** (Port 8001): Business registration and location search
+3. **Streamlit UI** (Port 8501): User interface for registration and search
+4. **OpenAI Integration**: Embeddings and LLM for semantic understanding
 
-## Table of contents
-- [Summary of available endpoints](#Summary-of-available-endpoints)
-- [How it works](#How-it-works)
-- [Customizing the pipeline](#Customizing-the-pipeline)
-- [How to run the project](#How-to-run-the-project)
-- [Using the app](#Query-the-documents)
+### Data Flow
 
-
-## Summary of available endpoints
-
-This example spawns a lightweight webserver using Pathway’s [`QASummaryRestServer`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/servers#pathway.xpacks.llm.servers.QASummaryRestServer) that accepts queries on five possible endpoints, divided into two categories: document indexing and RAG with LLM.
-
-### Document Indexing capabilities
-- `/v1/retrieve` to perform similarity search;
-- `/v1/statistics` to get the basic stats about the indexer's health;
-- `/v2/list_documents` to retrieve the metadata of all files currently processed by the indexer.
-
-### LLM and RAG capabilities
-- `/v2/answer` to ask questions about your documents, or directly talk with your LLM;
-- `/v2/summarize` to summarize a list of texts;
-
-See the [using the app section](###Using-the-app) to learn how to use the provided endpoints.
-
-## How it works
-
-1. **Data Ingestion**  
-We define one or more sources in `app.yaml` (local directories, Google Drive, Microsoft SharePoint, etc.).  
-- The provided demo references a local folder `data/` by default.  
-- The code can poll these sources at configured intervals, so when new documents appear or existing ones change, they are automatically parsed and re-indexed in real-time.
-
-2. **Parsing & Splitting**  
-Using [Unstructured](https://unstructured.io/) (through Pathway’s [`ParseUnstructured`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/parsers#pathway.xpacks.llm.parsers.ParseUnstructured)) and [TokenCountSplitter](https://pathway.com/developers/api-docs/pathway-xpacks-llm/splitters#pathway.xpacks.llm.splitters.TokenCountSplitter), documents are chunked into smaller parts.
-
-3. **Embedding**  
-Via [`OpenAIEmbedder`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/embedders#pathway.xpacks.llm.embedders.OpenAIEmbedder), the chunks get turned into embeddings. You can substitute your own embedder if you wish.
-
-4. **Indexing**  
-Using [`BruteForceKnnFactory`](https://pathway.com/developers/api-docs/pathway-stdlib/indexing#pathway.stdlib.indexing.BruteForceKnnFactory), the embeddings are stored in a vector index. This is all streaming as well, so new embeddings are added or updated automatically.
-
-5. **Serving**  
-- We create a [`SummaryQuestionAnswerer`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/question_answering#pathway.xpacks.llm.question_answering.SummaryQuestionAnswerer) (as specified in `app.py`), which can handle both question-answering and summarization requests.  
-- A web server, [`QASummaryRestServer`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/servers#pathway.xpacks.llm.servers.QASummaryRestServer), exposes multiple endpoints for retrieval, Q&A, summarization, and more.
-
-Because Pathway is fully incremental, any changes to your source files immediately flow through parsing, embedding, indexing, and ultimately get reflected in the answers from the LLM. The user can then query the created index with simple HTTP requests to the endpoints mentioned above.
-
-## Pipeline Organization
-
-This folder contains several objects:
-- `app.py`, the application code using Pathway and written in Python;
-- `app.yaml`, the file containing configuration of the pipeline, like LLM models, sources or server address;
-- `requirements.txt`, the dependencies for the pipeline. It can be passed to `pip install -r ...` to install everything that is needed to launch the pipeline locally;
-- `Dockerfile`, the Docker configuration for running the pipeline in the container;
-- `.env`, a short environment variables configuration file where the OpenAI key must be stored;
-- `data/`, a folder with exemplary files that can be used for the test runs.
-- `ui/`, a simple ui written in Streamlit for asking questions.
-
-## Pathway tooling
-- Prompts and helpers
-
-Pathway allows you to define custom prompts in addition to the ones provided in [`pathway.xpacks.llm`](https://pathway.com/developers/user-guide/llm-xpack/overview).
-
-You can also use user-defined functions using the [`@pw.udf`](https://pathway.com/developers/api-docs/pathway#pathway.udf) decorator to define custom functions that will run on streaming data.
-
-- RAG
-
-Pathway provides all the tools to create a RAG application and query it: a [Pathway Document store](https://pathway.com/developers/api-docs/pathway-xpacks-llm/document_store#pathway.xpacks.llm.document_store.DocumentStore) and a web server (defined with the [REST connector](https://pathway.com/developers/api-docs/pathway-io/http#pathway.io.http.rest_connector)).
-They are defined in our demo in the main class `PathwayRAG` along with the different functions and schemas used by the RAG.
-
-For the sake of the demo, we kept the app simple, consisting of the main components you would find in a regular RAG application. It can be further enhanced with query writing methods, re-ranking layer and custom splitting steps.
-
-Don't hesitate to take a look at our [documentation](https://pathway.com/developers/user-guide/introduction/welcome) to learn how Pathway works.
-
-
-## OpenAI API Key Configuration
-
-Default LLM provider in this template is OpenAI, so, unless you change the configuration, you need to provide OpenAI API key. Please configure your key in a `.env` file by providing it as follows: `OPENAI_API_KEY=sk-*******`. You can refer to the stub file `.env` in this repository, where you will need to paste your key instead of `sk-*******`.
-
-## Customizing the pipeline
-
-The code can be modified by changing the `app.yaml` configuration file. To read more about YAML files used in Pathway templates, read [our guide](https://pathway.com/developers/templates/configure-yaml).
-
-In the `app.yaml` file we define:
-- input connectors
-- LLM
-- embedder
-- index
-and any of these can be replaced or, if no longer needed, removed. For components that can be used check 
-Pathway [LLM xpack](https://pathway.com/developers/user-guide/llm-xpack/overview), or you can implement your own.
- 
-You can also check our other templates - [demo-question-answering](https://github.com/pathwaycom/llm-app/tree/main/examples/pipelines/demo-question-answering), 
-[Multimodal RAG](https://github.com/pathwaycom/llm-app/tree/main/examples/pipelines/gpt_4o_multimodal_rag) or 
-[Private RAG](https://github.com/pathwaycom/llm-app/tree/main/examples/pipelines/private-rag). As all of these only differ 
-in the YAML configuration file, you can also use them as an inspiration for your custom pipeline.
-
-Here some examples of what can be modified.
-
-### LLM Model
-
-You can choose any of the GPT-3.5 Turbo, GPT-4, or GPT-4 Turbo models proposed by Open AI.
-You can find the whole list on their [models page](https://platform.openai.com/docs/models/gpt-4-and-gpt-4-turbo).
-
-You simply need to change the `model` to the one you want to use:
-```yaml
-$llm: !pw.xpacks.llm.llms.OpenAIChat
-  model: "gpt-3.5-turbo"
-  retry_strategy: !pw.udfs.ExponentialBackoffRetryStrategy
-    max_retries: 6
-  cache_strategy: !pw.udfs.DiskCache
-  temperature: 0.05
-  capacity: 8
+```
+Business Registration → CSV Storage → Pathway Indexing → Vector Search → Location Filtering → Results
 ```
 
-The default model is `gpt-3.5-turbo`
+## 📡 API Endpoints
 
-You can also use different provider, by using different class from [Pathway LLM xpack](https://pathway.com/developers/user-guide/llm-xpack/overview),
-e.g. here is configuration for locally run Mistral model.
+### 🔵 Pathway RAG API (Port 8000)
 
-```yaml
-$llm: !pw.xpacks.llm.llms.LiteLLMChat
-  model: "ollama/mistral"
-  retry_strategy: !pw.udfs.ExponentialBackoffRetryStrategy
-    max_retries: 6
-  cache_strategy: !pw.udfs.DiskCache
-  temperature: 0
-  top_p: 1
-  api_base: "http://localhost:11434"
-```
+#### Document Indexing Endpoints
 
-### Index of your choice
-
-The [`DocumentStore`](https://pathway.com/developers/api-docs/pathway-xpacks-llm/document_store#pathway.xpacks.llm.document_store.DocumentStore) makes building and customizing a document indexing pipeline straightforward. It processes documents and enables querying the closest documents to a given query based on your chosen indexing strategy. Here's how you can use a hybrid indexing approach, combining vector-based and text-based retrieval: 
-
-Example: Hybrid Indexing with `BruteForceKNN` and `TantivyBM25`
-
-The following example demonstrates how to configure and use the [HybridIndex](https://pathway.com/developers/api-docs/indexing#pathway.stdlib.indexing.HybridIndex) that combines:
-
-- **`BruteForceKNN`**: A vector-based index leveraging embeddings for semantic similarity search.
-- **[`TantivyBM25`](https://pathway.com/developers/api-docs/indexing#pathway.stdlib.indexing.TantivyBM25)**: A text-based index using BM25 for keyword matching.
-
-
-```yaml
-$knn_index: !pw.stdlib.indexing.BruteForceKnnFactory
-  reserved_space: 1000
-  embedder: $embedder
-  metric: !pw.engine.BruteForceKnnMetricKind.COS
-  dimensions: 1536
-
-$bm25_index: !pw.stdlib.indexing.TantivyBM25Factory
-
-$hybrid_index_factory: !pw.stdlib.indexing.HybridIndexFactory
-  retriever_factories:
-    - $knn_index
-    - $bm25_index
-
-$document_store: !pw.xpacks.llm.document_store.DocumentStore
-  docs: $sources
-  parser: $parser
-  splitter: $splitter
-  retriever_factory: $hybrid_index_factory
-```
-Choose the indexing strategy that fits your requirements with `DocumentStore`
-
-### Webserver
-
-You can configure the host and the port of the webserver.
-Here is the default configuration:
-```yaml
-host: "0.0.0.0"
-port: 8000
-```
-
-### Cache
-
-You can configure whether you want to enable cache, to avoid repeated API accesses, and where the cache is stored.
-Default values:
-```yaml
-with_cache: True
-cache_backend: !pw.persistence.Backend.filesystem
-  path: ".Cache"
-```
-
-### Data sources
-
-You can configure the data sources by changing `$sources` in `app.yaml`.
-You can add as many data sources as you want. You can have several sources of the same kind, for instance, several local sources from different folders.
-The sections below describe how to configure local, Google Drive and Sharepoint source, but you can use any input [connector](https://pathway.com/developers/user-guide/connecting-to-data/connectors) from Pathway package.
-
-By default, the app uses a local data source to read documents from the `data` folder.
-
-#### Local Data Source
-
-The local data source is configured by using map with tag `!pw.io.fs.read`. Then set `path` to denote the path to a folder with files to be indexed.
-
-#### Google Drive Data Source
-
-The Google Drive data source is enabled by using map with tag `!pw.io.gdrive.read`. The map must contain two main parameters:
-- `object_id`, containing the ID of the folder that needs to be indexed. It can be found from the URL in the web interface, where it's the last part of the address. For example, the publicly available demo folder in Google Drive has the URL `https://drive.google.com/drive/folders/1cULDv2OaViJBmOfG5WB0oWcgayNrGtVs`. The last part of this address is `1cULDv2OaViJBmOfG5WB0oWcgayNrGtVs` and this is the `object_id` you would need to specify.
-- `service_user_credentials_file`, containing the path to the credentials files for the Google [service account](https://cloud.google.com/iam/docs/service-account-overview). To get more details on setting up the service account and getting credentials, you can also refer to [this tutorial](https://pathway.com/developers/user-guide/connectors/gdrive-connector#setting-up-google-drive).
-
-Besides, to speed up the indexing process you may want to specify the `refresh_interval` parameter, denoted by an integer number of seconds. It corresponds to the frequency between two sequential folder scans. If unset, it defaults to 30 seconds.
-
-For the full list of the available parameters, please refer to the Google Drive connector [documentation](https://pathway.com/developers/api-docs/pathway-io/gdrive#pathway.io.gdrive.read).
-
-#### SharePoint Data Source
-
-This data source requires Scale or Enterprise [license key](https://pathway.com/pricing) - you can obtain free Scale key on [Pathway website](https://pathway.com/get-license).
-
-To use it, set the map tag to be `!pw.xpacks.connectors.sharepoint.read`, and then provide values of `url`, `tenant`, `client_id`, `cert_path`, `thumbprint` and `root_path`. To read about the meaning of these arguments, check the Sharepoint connector [documentation](https://pathway.com/developers/api-docs/pathway-xpacks-sharepoint#pathway.xpacks.connectors.sharepoint.read).
-
-## How to run the project
-
-Clone the llm-app repository from GitHub. This repository contains all the files you’ll need.
+**GET /v1/statistics**
+Get indexing statistics and system health.
 
 ```bash
-git clone https://github.com/pathwaycom/llm-app.git
+curl -X POST http://localhost:8000/v1/statistics \
+  -H "Content-Type: application/json"
 ```
 
-### Locally
-If you are on Windows, please refer to [running with docker](#With-Docker) section below.
-
-To run locally, change your directory in the terminal to this folder. Then, run the app with `python`.
+**POST /v2/list_documents**
+Retrieve metadata of all indexed documents.
 
 ```bash
-cd examples/pipelines/demo-question-answering
+curl -X POST http://localhost:8000/v2/list_documents \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
 
+**POST /v1/retrieve**
+Perform vector similarity search on indexed documents.
+
+```bash
+curl -X POST http://localhost:8000/v1/retrieve \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "coffee shops with wifi",
+    "k": 10
+  }'
+```
+
+#### LLM and RAG Capabilities
+
+**POST /v2/answer**
+Ask questions about your documents or chat with the LLM.
+
+**POST /v2/summarize**
+Summarize a list of texts.
+
+### 🟢 Business API (Port 8001)
+
+#### Business Registration Endpoints
+
+**POST /append-csv**
+Register a single business.
+
+```bash
+curl -X POST http://localhost:8001/append-csv \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Smith",
+    "business_name": "Smith Coffee House",
+    "lat_long": "37.7749,-122.4194",
+    "business_category": "Cafe",
+    "business_tags": "coffee,wifi,outdoor-seating"
+  }'
+```
+
+**POST /append-csv/batch**
+Register multiple businesses at once.
+
+```bash
+curl -X POST http://localhost:8001/append-csv/batch \
+  -H "Content-Type: application/json" \
+  -d '{
+    "records": [
+      {
+        "name": "John Smith",
+        "business_name": "Smith Coffee House",
+        "lat_long": "37.7749,-122.4194",
+        "business_category": "Cafe",
+        "business_tags": "coffee,wifi"
+      }
+    ]
+  }'
+```
+
+#### Search Endpoints
+
+**POST /search-businesses**
+Primary search endpoint with AI-powered vectorized search and location filtering.
+
+```bash
+curl -X POST http://localhost:8001/search-businesses \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_lat": 37.7749,
+    "user_lng": -122.4194,
+    "query": "coffee shops with wifi",
+    "max_distance_km": 20.0,
+    "category_filter": "Cafe",
+    "tag_filters": ["wifi", "coffee"],
+    "limit": 10
+  }'
+```
+
+**Response Format:**
+```json
+{
+  "ok": true,
+  "results": [
+    {
+      "name": "John Smith",
+      "business_name": "Smith Coffee House",
+      "latitude": 37.7749,
+      "longitude": -122.4194,
+      "business_category": "Cafe",
+      "business_tags": "coffee,wifi,outdoor-seating",
+      "distance_km": 0.0,
+      "vector_score": 0.12,
+      "source_path": "data/data.csv"
+    }
+  ],
+  "search_method": "vectorized",
+  "total_found": 1
+}
+```
+
+#### System Health
+
+**GET /health**
+Check system status and connectivity.
+
+```bash
+curl http://localhost:8001/health
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Python 3.9+
+- OpenAI API key
+- Virtual environment (recommended)
+
+### Installation
+
+1. **Clone and setup environment:**
+```bash
+git clone <repository-url>
+cd ai-assistant-rag
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# or venv\Scripts\activate  # Windows
+```
+
+2. **Install dependencies:**
+```bash
+pip install -r requirements.txt
+cd ui && pip install -r requirements.txt && cd ..
+```
+
+3. **Configure environment:**
+```bash
+echo "OPENAI_API_KEY=your-key-here" > .env
+```
+
+### Running the System
+
+**Option 1: Manual Start (Recommended for Development)**
+
+```bash
+# Terminal 1: Main application (Pathway + Upload API)
 python app.py
+
+# Terminal 2: Streamlit UI
+cd ui
+streamlit run main.py --server.port 8501
 ```
 
-Please note that the local run requires the dependencies to be installed. It can be done with a simple pip command:
-`pip install -r requirements.txt`
-
-### With Docker
-
-Build the Docker with:
-
+**Option 2: Docker**
 ```bash
 docker compose build
-```
-
-And, run with:
-
-```bash
 docker compose up
 ```
 
-This will start the pipeline and the ui for asking questions.
+### Access Points
 
-### Query the documents
-You will see the logs for parsing & embedding documents in the Docker image logs. 
-Give it a few minutes to finish up on embeddings, you will see `0 entries (x minibatch(es)) have been...` message.
-If there are no more updates, this means the app is ready for use!
+- **Main UI**: http://localhost:8501
+- **Business Registration**: http://localhost:8501/business_registration
+- **Location Search**: http://localhost:8501/location_search
+- **API Documentation**: http://localhost:8001/docs
+- **Pathway API**: http://localhost:8000
 
-To test it, let's query the stats:
-```bash
-curl -X 'POST'   'http://localhost:8000/v1/statistics'   -H 'accept: */*'   -H 'Content-Type: application/json'
+## 🔧 Configuration
+
+### app.yaml Configuration
+
+The system is configured through `app.yaml`:
+
+```yaml
+# Data sources - reads from individual business files
+$sources:
+  - !pw.io.fs.read
+    path: data/businesses
+    format: binary
+    with_metadata: true
+
+# LLM configuration
+$llm: !pw.xpacks.llm.llms.OpenAIChat
+  model: "gpt-4o"
+  temperature: 0
+
+# Embedder for vector search
+$embedder: !pw.xpacks.llm.embedders.OpenAIEmbedder
+  model: "text-embedding-3-small"
+
+# Document processing
+$splitter: !pw.xpacks.llm.splitters.TokenCountSplitter
+  max_tokens: 60
+
+# Hybrid search (vector + keyword)
+$retriever_factory: !pw.stdlib.indexing.HybridIndexFactory
+  retriever_factories:
+    - $knn_index    # Vector similarity
+    - $bm25_index   # Keyword matching
 ```
 
-For more information on available endpoints by default, see [above](#Summary-of-available-endpoints).
-
-We provide some example `curl` queries to start with.
-
-The general structure is sending a request to `http://{HOST}:{PORT}/{ENDPOINT}`.
-
-Where HOST is the `host` variable you specify in your app configuration. PORT is the `port` number you are running your app on, and ENDPOINT is the specific extension for endpoints. They are specified in the application code, and they are listed with the versioning as `/v1/...`.
-
-Note that, if you are using the Pathway hosted version, you should send requests to `https://...` rather than `http://...` and emit the `:{PORT}` part of the URL.
-
-You need to add two headers, `-H 'accept: */*'   -H 'Content-Type: application/json'`.
-
-Finally, for endpoints that expect data in the query, you can pass it with `-d '{key: value}'` format.
-
-#### Listing inputs
-Get the list of available inputs and associated metadata.
+### Environment Variables
 
 ```bash
-curl -X 'POST'   'http://localhost:8000/v2/list_documents'   -H 'accept: */*'   -H 'Content-Type: application/json'
+OPENAI_API_KEY=your-openai-api-key
+DATA_DIR=data                    # Data directory path
+PATHWAY_HOST=localhost           # Pathway server host
+PATHWAY_PORT=8000               # Pathway server port
 ```
 
-#### Searching in your documents
+## 🎯 Features
 
-Search API gives you the ability to search in available inputs and get up-to-date knowledge.
-`query` is the search query you want to execute.
+### Business Registration
 
-`k` (optional) is an integer, the number of documents to be retrieved. Documents in this case means small chunks that are stored in your vector store.
+- **Validation**: GPS coordinate validation and format checking
+- **Storage**: CSV and individual text file storage for optimal indexing
+- **Real-time Indexing**: Automatic Pathway reindexing after registration
+- **Batch Support**: Register multiple businesses simultaneously
 
-`metadata_filter` (optional) String to filter results with Jmespath query.
+### Location-Based Search
 
-`filepath_globpattern` (optional) String to filter results with globbing pattern. For example `"*"` would result in no filter, `"*.docx"` would result in only `docx` files being retrieved.
+- **AI-Powered**: Uses OpenAI embeddings for semantic understanding
+- **Distance Filtering**: Configurable search radius (up to 25,000km)
+- **Smart Ranking**: Combines relevance score with distance proximity
+- **Category/Tag Filtering**: Filter by business type and tags
+- **Geolocation Support**: Browser-based location detection
 
+### Search Intelligence
+
+**Semantic Understanding:**
+- "coffee shop" matches "cafe", "espresso bar"
+- "italian food" finds "Italian restaurants", "pizza places"
+- "car service" matches "auto repair", "gas stations"
+
+**Ranking Algorithm:**
+- **Limited Search** (<10,000km): 70% relevance, 30% distance
+- **Unlimited Search** (≥10,000km): 40% relevance, 60% distance
+- **Auto-detection**: Queries with "near me", "nearby" emphasize distance
+
+## 🗂️ Data Models
+
+### Business Record Schema
+
+```python
+{
+  "name": str,                    # Business owner name
+  "business_name": str,           # Business name
+  "lat_long": str,               # "latitude,longitude"
+  "business_category": str,       # Business category
+  "business_tags": str           # Comma-separated tags
+}
+```
+
+### Search Request Schema
+
+```python
+{
+  "user_lat": float,             # User latitude (-90 to 90)
+  "user_lng": float,             # User longitude (-180 to 180)
+  "query": str,                  # Search query (optional)
+  "max_distance_km": float,      # Search radius (0.1 to 25000)
+  "category_filter": str,        # Category filter (optional)
+  "tag_filters": List[str],      # Tag filters (optional)
+  "limit": int                   # Result limit (1 to 200)
+}
+```
+
+## 🔍 Search Methods
+
+### 1. Vectorized Search (Primary)
+- Uses OpenAI embeddings for semantic similarity
+- Hybrid indexing (vector + BM25 keyword matching)
+- Real-time document processing
+- Intelligent ranking with distance weighting
+
+### 2. Fallback Mechanisms
+- Automatic fallback if Pathway is unavailable
+- Graceful error handling with informative messages
+- System health monitoring and status reporting
+
+## 📊 System Monitoring
+
+### Health Checks
+
+The system provides comprehensive health monitoring:
 
 ```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v1/retrieve' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "query": "Which articles of General Data Protection Regulation are relevant for clinical trials?",
-  "k": 6
-}'
+# Check overall system health
+curl http://localhost:8001/health
+
+# Check Pathway statistics
+curl -X POST http://localhost:8000/v1/statistics
+
+# List indexed documents
+curl -X POST http://localhost:8000/v2/list_documents
 ```
 
-#### Asking questions to LLM (With and without RAG)
+### Logging
 
-- Note: The local version of this app does not require `openai_api_key` parameter in the payload of the query. Embedder and LLM will use the API key in the `.env` file. However, Pathway hosted public demo available on the [website](https://pathway.com/solutions/ai-pipelines) requires a valid `openai_api_key` to execute the query.
+- **Pathway Server**: Document indexing and search operations
+- **Upload API**: Business registration and search requests
+- **UI**: User interactions and system status
 
-- Note: All of the RAG endpoints use the `model` provided in the config by default, however, you can specify another model with the `model` parameter in the payload to use a different one for generating the response.
+## 🐛 Troubleshooting
 
-For question answering without any context, simply omit `filters` key in the payload and send the following request.
+### Common Issues
+
+**APIs not starting:**
+```bash
+# Check if ports are free
+lsof -i :8000 :8001 :8501
+
+# Verify Python environment
+which python
+pip list | grep -E "(pathway|fastapi|streamlit)"
+```
+
+**No search results:**
+- Verify businesses exist in `data/data.csv`
+- Check coordinate format: "latitude,longitude"
+- Ensure businesses are within search radius
+- Verify OpenAI API key in `.env`
+
+**Indexing not working:**
+- Check OpenAI API key configuration
+- Monitor Pathway logs for embedding errors
+- Verify document list via `/v2/list_documents`
+
+**UI not loading:**
+- Check Streamlit port (8501)
+- Verify UI requirements installed
+- Check browser console for errors
+
+### Debug Commands
 
 ```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v2/answer' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "prompt": "What is the start date of the contract?"
-}'
+# Check system status
+python -c "import requests; print(requests.get('http://localhost:8001/health').json())"
+
+# Test business registration
+curl -X POST http://localhost:8001/append-csv \
+  -H "Content-Type: application/json" \
+  -d '{"name": "Test", "business_name": "Test Business", "lat_long": "0,0", "business_category": "Test", "business_tags": "test"}'
+
+# Test search
+curl -X POST http://localhost:8001/search-businesses \
+  -H "Content-Type: application/json" \
+  -d '{"user_lat": 0, "user_lng": 0, "query": "test", "max_distance_km": 20000.0}'
 ```
 
-Question answering with the knowledge from a specific file, based on the path.
-```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v2/answer' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "prompt": "What is the start date of the contract?",
-  "filters": "globmatch(`IdeanomicsInc_20160330_10-K_EX-10.26_9512211_EX-10.26_Content License Agreement.pdf`, path)"
-}'
+## 🔧 Development
+
+### Project Structure
+
+```
+ai-assistant-rag/
+├── app.py                 # Main Pathway application
+├── upload_api.py          # FastAPI business registration/search
+├── utils.py              # Utility functions
+├── app.yaml              # Pathway configuration
+├── requirements.txt      # Python dependencies
+├── .env                  # Environment variables
+├── data/
+│   ├── data.csv          # Business data storage
+│   ├── businesses.txt    # Normalized business data
+│   └── businesses/       # Individual business files
+└── ui/
+    ├── main.py           # Main Streamlit app
+    ├── requirements.txt  # UI dependencies
+    └── pages/
+        ├── business_registration.py
+        └── location_search.py
 ```
 
-Alternatively, with the knowledge from files that have the word `Ide` in their paths.
-```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v2/answer' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "prompt": "What is the start date of the contract?",
-  "filters": "contains(path, `Ide`)"
-}'
-```
+### Key Technologies
 
-You can also retrieve the context documents that were used to answer the question,
-```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v2/answer' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "prompt": "What is the start date of the contract?",
-  "return_context_docs": true
-}'
-```
+- **[Pathway](https://pathway.com/)**: Real-time data processing and RAG
+- **[FastAPI](https://fastapi.tiangolo.com/)**: REST API framework
+- **[Streamlit](https://streamlit.io/)**: Web UI framework
+- **[OpenAI](https://openai.com/)**: Embeddings and LLM
+- **[USearch](https://github.com/unum-cloud/usearch)**: Vector similarity search
 
-- Note: You can limit the knowledge to a folder or, to only Word documents by using ```"contains(path, `docx`)"```
-- Note: You could also use a few filters separated with `||` (`or` clause) or with `&&` (`and` clause).
+### Contributing
 
-You can further modify behavior in the payload by defining keys and values in `-d '{key: value}'`.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-If you wish to use another model, specify in the payload as `"model": "gpt-4"`.
+## 📄 License
 
-For more detailed responses add `"response_type": "long"` to payload.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-#### Summarization
-To summarize a list of texts, use the following `curl` command.
+## 🙏 Acknowledgments
 
-```bash
-curl -X 'POST' \
-  'http://0.0.0.0:8000/v2/summarize' \
-  -H 'accept: */*' \
-  -H 'Content-Type: application/json' \
-  -d '{
-  "text_list": [
-    "I love apples.",
-    "I love oranges."
-  ]
-}'
-```
+- [Pathway](https://pathway.com/) for the real-time RAG framework
+- [OpenAI](https://openai.com/) for embeddings and language models
+- [FastAPI](https://fastapi.tiangolo.com/) and [Streamlit](https://streamlit.io/) communities
 
-Specifying the GPT model with `"model": "gpt-4"` is also possible.
+---
 
-This endpoint also supports setting different models in the query by default.
-
-To execute similar curl queries as above, you can visit [ai-pipelines page](https://pathway.com/solutions/ai-pipelines/) and try out the queries from the Swagger UI.
-
-
-#### Adding Files to Index
-
-First, you can try adding your files and seeing changes in the index. To test index updates, simply add more files to the `data` folder.
-
-If you are using Google Drive or other sources, simply upload your files there.
-
-### Using the UI
-This pipeline includes a simple ui written in Streamlit. After you run the pipeline with `docker compose up`, you can access the UI at `http://localhost:8501`. This UI uses the `/v2/answer` endpoint to answer your questions.
+<div align="center">
+  <strong>🗺️ Business Location RAG System | Powered by Pathway + OpenAI</strong>
+</div>
