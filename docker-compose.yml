@@ -11,17 +11,22 @@ services:
       - "8000:8000"  # Pathway RAG API
       - "8001:8001"  # FastAPI Upload/Search API
     environment:
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
       - DATA_DIR=/app/data
       - PATHWAY_HOST=0.0.0.0
       - PATHWAY_PORT=8000
     volumes:
-      - ./data:/app/data
-      - ./Cache:/app/Cache
-      - ./.env:/app/.env:ro
+      - rag-data:/app/data
+      - rag-cache:/app/Cache
     networks:
       - rag-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Streamlit UI Service
   streamlit-ui:
@@ -35,11 +40,15 @@ services:
       - STREAMLIT_SERVER_PORT=8501
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - API_BASE_URL=http://rag-app:8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
     volumes:
-      - ./.env:/app/.env:ro
+      - rag-data:/app/data
     networks:
       - rag-network
     restart: unless-stopped
+    depends_on:
+      rag-app:
+        condition: service_healthy
     command: ["streamlit", "run", "ui/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
 
 networks:

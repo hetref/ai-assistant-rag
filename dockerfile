@@ -4,7 +4,8 @@ FROM python:3.11-slim
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PATH="/app/venv/bin:$PATH"
 
 # Set work directory
 WORKDIR /app
@@ -20,10 +21,9 @@ RUN apt-get update && apt-get install -y \
 RUN python -m venv /app/venv
 
 # Activate virtual environment and upgrade pip
-ENV PATH="/app/venv/bin:$PATH"
 RUN pip install --upgrade pip
 
-# Copy requirements files
+# Copy requirements files first for better Docker layer caching
 COPY requirements.txt .
 COPY ui/requirements.txt ui/requirements.txt
 
@@ -34,10 +34,15 @@ RUN pip install -r requirements.txt && \
 # Copy application code
 COPY . .
 
-# Create necessary directories
+# Create necessary directories with proper permissions
 RUN mkdir -p data/businesses && \
     mkdir -p Cache && \
     chmod -R 755 data Cache
+
+# Create a non-root user for security
+RUN useradd --create-home --shell /bin/bash app && \
+    chown -R app:app /app
+USER app
 
 # Expose ports
 EXPOSE 8000 8001 8501

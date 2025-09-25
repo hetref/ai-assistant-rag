@@ -8,6 +8,7 @@ from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from utils import (
     validate_coordinates,
@@ -19,6 +20,16 @@ import re
 
 
 app = FastAPI(title="Upload API", version="1.0.0")
+
+# Add CORS middleware to fix cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allow all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+)
+
 logger = logging.getLogger("upload_api")
 logging.basicConfig(level=logging.INFO)
 

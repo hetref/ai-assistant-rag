@@ -1,22 +1,36 @@
 # Docker Setup for AI RAG Assistant
 
-This is a simplified Docker setup for the AI RAG Assistant application that uses a virtual environment for dependency management.
+This is a production-ready Docker setup for the AI RAG Assistant application with enhanced security, health checks, and proper service orchestration.
 
 ## Features
 
 - **Virtual Environment**: All Python dependencies are installed in a virtual environment (`/app/venv`)
-- **Simplified Configuration**: No health checks or complex user management
-- **Root User**: Uses the default root user for simplicity
-- **Dual Requirements**: Installs both main requirements and UI requirements
+- **Security**: Runs as non-root user for enhanced security
+- **Health Checks**: Built-in health monitoring for all services
+- **Service Dependencies**: Proper service startup ordering
+- **Persistent Data**: Docker volumes for data persistence
+- **Optimized Builds**: Docker layer caching and .dockerignore for faster builds
 
 ## Quick Start
 
-1. **Build and run the services:**
+### Option 1: Automated Setup (Recommended)
+```bash
+./setup.sh
+```
+
+### Option 2: Manual Setup
+1. **Create environment file:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and add your OpenAI API key
+   ```
+
+2. **Build and run the services:**
    ```bash
    docker-compose up --build
    ```
 
-2. **Access the applications:**
+3. **Access the applications:**
    - **Streamlit UI**: http://localhost:8501
    - **RAG API**: http://localhost:8000
    - **Upload/Search API**: http://localhost:8001
@@ -49,14 +63,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 - Creates virtual environment at `/app/venv`
 - Installs system dependencies (build-essential, curl, git)
 - Installs Python packages in virtual environment
-- Runs as root user (no user creation)
-- No health checks for simplicity
+- Runs as non-root user for security
+- Optimized layer caching for faster builds
 
 ### Docker Compose Features
 - Two services: `rag-app` and `streamlit-ui`
 - Shared network: `business-rag-network`
-- Volume mounts for data persistence
-- No health checks or service dependencies
+- Docker volumes for data persistence
+- Health checks for service monitoring
+- Service dependencies for proper startup ordering
 - Automatic restart unless stopped
 
 ## Commands

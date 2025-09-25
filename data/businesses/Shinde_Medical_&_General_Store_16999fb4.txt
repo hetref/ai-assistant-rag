@@ -1,0 +1,7 @@
+business_name: Shinde Medical & General Store
+owner_name: John Shinde
+business_category: Healthcare
+business_tags: care, store, clinic, health, shinde, general, medical, service, friendly, pharmacy, products, wellness, appointments
+latitude: 18.5204
+longitude: 73.8567
+lat_long: 18.5204,73.8567

@@ -1,0 +1,7 @@
+business_name: PANEER DAIRY
+owner_name: Yash Nimse
+business_category: Fast Food
+business_tags: milk
+latitude: 19.246650000000002
+longitude: 73.142967
+lat_long: 19.246650000000002,73.142967

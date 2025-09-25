@@ -1,0 +1,7 @@
+business_name: Prathmesh Restaurant
+owner_name: Prathmesh
+business_category: Restaurant
+business_tags: food, dining, family, indian, cuisine, parking, friendly, prathmesh, restaurant, reservations, family friendly
+latitude: 19.2189
+longitude: 73.1057
+lat_long: 19.2189,73.1057
