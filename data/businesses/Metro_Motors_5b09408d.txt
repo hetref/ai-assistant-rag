@@ -1,7 +1,0 @@
-business_name: Metro Motors
-owner_name: Ethan Carter
-business_category: Auto Service
-business_tags: diagnostics,engines,tires
-latitude: 39.9526
-longitude: -75.1652
-lat_long: 39.9526,-75.1652

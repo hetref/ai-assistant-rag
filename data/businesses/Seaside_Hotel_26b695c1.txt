@@ -1,7 +1,0 @@
-business_name: Seaside Hotel
-owner_name: Hotel Admin
-business_category: Hotel
-business_tags: wifi
-latitude: 37.7549
-longitude: -122.4394
-lat_long: 37.7549,-122.4394

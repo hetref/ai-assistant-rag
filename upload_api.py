@@ -6,6 +6,7 @@ import logging
 import hashlib
 from datetime import datetime
 from pathlib import Path
+import json
 from typing import List, Optional, Dict, Any
 
 from fastapi import FastAPI, HTTPException, Request
@@ -182,28 +183,31 @@ def append_rows(rows: List[DataRecord]) -> int:
 
 
 def write_business_file(record: DataRecord) -> Path:
-    """Create a single per-business .txt file (same logic as append-csv)."""
+    """Create a single per-business .json file with normalized keys."""
     coords = parse_lat_lng(record.lat_long)
-    lat_str, lon_str = ("", "")
+    lat, lon = (None, None)
     if coords:
-        lat_str, lon_str = coords
+        lat, lon = coords
     safe_name = "_".join(
         [
             str(record.business_name).strip().replace("/", "-").replace(" ", "_")[:40],
             uuid.uuid4().hex[:8],
         ]
     )
-    content_lines = [
-        f"business_name: {record.business_name}",
-        f"owner_name: {record.name}",
-        f"business_category: {record.business_category}",
-        f"business_tags: {record.business_tags}",
-        f"latitude: {lat_str}",
-        f"longitude: {lon_str}",
-        f"lat_long: {record.lat_long}",
-    ]
-    out_path = BUSINESSES_DIR / f"{safe_name}.txt"
-    out_path.write_text("\n".join(content_lines), encoding="utf-8")
+
+    payload = {
+        "name": record.name,
+        "owner_name": record.name,
+        "business_name": record.business_name,
+        "business_category": record.business_category,
+        "business_tags": record.business_tags,
+        "latitude": lat,
+        "longitude": lon,
+        "lat_long": record.lat_long,
+    }
+
+    out_path = BUSINESSES_DIR / f"{safe_name}.json"
+    out_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     return out_path
 
 
@@ -217,6 +221,52 @@ def parse_business_from_text(text: str) -> List[Dict[str, Any]]:
     raw = (text or "").strip()
     if not raw:
         return businesses
+
+    # 0) Try JSON first (supports either a dict or a list of dicts)
+    try:
+        parsed = json.loads(raw)
+        candidate_items: List[Dict[str, Any]] = []
+        if isinstance(parsed, dict):
+            candidate_items = [parsed]
+        elif isinstance(parsed, list):
+            candidate_items = [p for p in parsed if isinstance(p, dict)]
+
+        for item in candidate_items:
+            business_name = (item.get("business_name") or item.get("business") or "").strip()
+            name = (item.get("name") or item.get("owner_name") or "").strip()
+            category = (item.get("business_category") or item.get("category") or "").strip()
+            tags = item.get("business_tags") or item.get("tags") or ""
+            lat = item.get("latitude")
+            lon = item.get("longitude")
+            lat_long = item.get("lat_long") or (f"{lat},{lon}" if lat is not None and lon is not None else "")
+
+            if (lat is None or lon is None) and lat_long:
+                coords = parse_lat_lng(str(lat_long))
+                if coords:
+                    lat, lon = coords
+            try:
+                if lat is not None:
+                    lat = float(lat)
+                if lon is not None:
+                    lon = float(lon)
+            except (TypeError, ValueError):
+                lat, lon = None, None
+
+            if business_name and category and lat is not None and lon is not None and validate_coordinates(lat, lon):
+                businesses.append({
+                    "name": name,
+                    "business_name": business_name,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "lat_long": f"{lat},{lon}",
+                    "business_category": category,
+                    "business_tags": tags,
+                })
+
+        if businesses:
+            return businesses
+    except json.JSONDecodeError:
+        pass
 
     # 1) Try key:value per-business format first
     if "business_name:" in raw and "business_category:" in raw:
@@ -673,6 +723,8 @@ async def health_check():
         pathway_status = "timeout"
     except Exception as e:
         pathway_status = f"error: {str(e)[:50]}"
+        
+        print("PATHWAY STATUS", pathway_status)
     
     # Check Redis status
     if CF_AVAILABLE:

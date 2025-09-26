@@ -1,7 +1,0 @@
-business_name: Dev Ally
-owner_name: Aryan Shinde
-business_category: Cafe
-business_tags: coffee,espresso,tea,space
-latitude: 19.07609
-longitude: 72.877426
-lat_long: 19.07609,72.877426

@@ -1,7 +1,0 @@
-business_name: GreenLife Pharmacy
-owner_name: Ava Martinez
-business_category: Pharmacy
-business_tags: organic,vitamins,medication
-latitude: 37.3382
-longitude: -121.8863
-lat_long: 37.3382,-121.8863

@@ -1,7 +1,0 @@
-business_name: Cafeday
-owner_name: Nirmal
-business_category: Cafe
-business_tags: cozy, shop, coffee, service, business, coffeday, espresso, affordable, atmosphere
-latitude: 73.142967
-longitude: 73.142967
-lat_long: 73.142967,73.142967

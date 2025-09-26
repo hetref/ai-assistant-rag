@@ -1,7 +1,0 @@
-business_name: Jadhav Medical 
-owner_name: Ayushi
-business_category: Healthcare
-business_tags: care, store, clinic, health, jadhav, medical, service, pharmacy, products, wellness, appointments
-latitude: 19.2123
-longitude: 19.2123
-lat_long: 19.2123,19.2123
