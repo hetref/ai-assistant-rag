@@ -84,16 +84,20 @@ def parse_lat_lng(lat_lng_str: str) -> Optional[tuple]:
         pass
     return None
 
-def search_businesses(query: str, user_lat: float, user_lng: float, max_distance: Optional[float] = 10.0) -> tuple[List[Dict], str]:
-    """Search for businesses using vectorized data from Pathway with location filtering."""
+def search_businesses(query: str, user_lat: float, user_lng: float, max_distance: Optional[float] = 10.0, user_session_id: Optional[str] = None) -> tuple[List[Dict], List[Dict], str]:
+    """Search for businesses using vectorized data from Pathway with location filtering and get recommendations."""
     try:
-        # Use the vectorized search endpoint
+        # Use the vectorized search endpoint with collaborative filtering
         payload = {
             "user_lat": user_lat,
             "user_lng": user_lng,
             "query": query,
-            "limit": 100  # Increased limit for unlimited search
+            "limit": 100,  # Increased limit for unlimited search
+            "include_recommendations": True
         }
+        
+        if user_session_id:
+            payload["user_session_id"] = user_session_id
         
         # Only add distance constraint if specified
         if max_distance is not None:
@@ -110,16 +114,22 @@ def search_businesses(query: str, user_lat: float, user_lng: float, max_distance
         
         if response.status_code != 200:
             st.error(f"API Error: {response.status_code}")
-            return [], "error"
+            return [], [], "error"
         
         data = response.json()
         
         if not data.get("ok", False):
             st.error(f"Search failed: {data.get('error', 'Unknown error')}")
-            return [], "error"
+            return [], [], "error"
         
         results = data.get("results", [])
+        recommendations = data.get("recommendations", [])
         search_method = data.get("search_method", "unknown")
+        
+        # Store user session info for tracking
+        if "user_id" in data and "session_id" in data:
+            st.session_state.cf_user_id = data["user_id"]
+            st.session_state.cf_session_id = data["session_id"]
         
         # Convert to expected format
         formatted_results = []
@@ -131,7 +141,8 @@ def search_businesses(query: str, user_lat: float, user_lng: float, max_distance
                 "longitude": business.get("longitude", 0),
                 "category": business.get("business_category", ""),
                 "tags": business.get("business_tags", ""),
-                "distance": business.get("distance_km", 0)
+                "distance": business.get("distance_km", 0),
+                "business_id": business.get("business_id", business.get("business_name", ""))
             }
             
             # Add vectorized search specific fields
@@ -141,17 +152,87 @@ def search_businesses(query: str, user_lat: float, user_lng: float, max_distance
             
             formatted_results.append(result)
         
-        return formatted_results, search_method
+        return formatted_results, recommendations, search_method
         
     except requests.exceptions.Timeout:
         st.error("❌ Search timed out. Please try again.")
-        return [], "timeout"
+        return [], [], "timeout"
     except requests.exceptions.ConnectionError:
         st.error("❌ Cannot connect to search API. Please check if the service is running.")
-        return [], "connection_error"
+        return [], [], "connection_error"
     except Exception as e:
         st.error(f"❌ Search error: {str(e)}")
-        return [], "error"
+        return [], [], "error"
+
+
+def track_business_interaction(business_id: str, business_name: str, interaction_type: str, query: Optional[str] = None, category: Optional[str] = None, tags: Optional[List[str]] = None, user_lat: Optional[float] = None, user_lng: Optional[float] = None):
+    """Track user interaction with a business for collaborative filtering."""
+    try:
+        payload = {
+            "business_id": business_id,
+            "business_name": business_name,
+            "interaction_type": interaction_type,  # 'view', 'click', 'bookmark'
+            "query": query,
+            "category": category,
+            "tags": tags,
+            "user_lat": user_lat,
+            "user_lng": user_lng
+        }
+        
+        response = requests.post(
+            f"{UPLOAD_API_URL}/interactions/track",
+            json=payload,
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            return response.json()
+        else:
+            st.warning(f"Failed to track interaction: {response.status_code}")
+            return None
+            
+    except Exception as e:
+        # Silently fail for tracking - don't disrupt user experience
+        return None
+
+
+def get_trending_searches(limit: int = 10) -> List[Dict]:
+    """Get trending search queries."""
+    try:
+        response = requests.get(
+            f"{UPLOAD_API_URL}/recommendations/trending-searches?limit={limit}",
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                return data.get("trending_searches", [])
+        
+        return []
+        
+    except Exception as e:
+        return []
+
+
+def get_people_also_searched(query: str, limit: int = 5) -> List[str]:
+    """Get 'People also searched for' suggestions."""
+    try:
+        response = requests.get(
+            f"{UPLOAD_API_URL}/recommendations/people-also-searched",
+            params={"query": query, "limit": limit},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                return data.get("suggestions", [])
+        
+        return []
+        
+    except Exception as e:
+        return []
 
 # Main UI
 st.title("🗺️ Location-Based Business Search")
@@ -341,8 +422,19 @@ with col1:
     
     # Search query
     st.subheader("🔍 What are you looking for?")
+    
+    # Handle clicked suggestions or trending searches
+    default_query = ""
+    if 'suggestion_clicked' in st.session_state:
+        default_query = st.session_state.suggestion_clicked
+        del st.session_state.suggestion_clicked
+    elif 'trending_clicked' in st.session_state:
+        default_query = st.session_state.trending_clicked
+        del st.session_state.trending_clicked
+    
     search_query = st.text_input(
         "",
+        value=default_query,
         placeholder="e.g., coffee shops, restaurants, gas stations, pharmacies",
         help="Describe what type of business you're looking for"
     )
@@ -352,8 +444,11 @@ with col1:
     
     # Search results
     if search_button and search_query and user_lat is not None and user_lng is not None:
+        # Get session ID for tracking
+        session_id = st.session_state.get('cf_session_id')
+        
         with st.spinner("🔄 Searching vectorized business data..."):
-            results, search_method = search_businesses(search_query, user_lat, user_lng, max_distance)
+            results, recommendations, search_method = search_businesses(search_query, user_lat, user_lng, max_distance, session_id)
         
         if results:
             # Show search method and success
@@ -374,13 +469,47 @@ with col1:
             else:
                 st.success(f"✅ Found {len(results)} businesses {distance_text}")
             
+            # Show recommendations if available
+            if recommendations:
+                st.markdown("### 🤖 Recommended for You")
+                st.info("Based on what similar users searched for:")
+                
+                rec_cols = st.columns(min(len(recommendations), 3))
+                for idx, rec in enumerate(recommendations[:3]):
+                    with rec_cols[idx % 3]:
+                        st.markdown(f"""
+                        <div style="background: #f0f8ff; padding: 10px; border-radius: 5px; margin: 5px 0;">
+                            <strong>🏪 {rec.get('business_name', 'Unknown')}</strong><br>
+                            <small>📂 {rec.get('category', '')}</small><br>
+                            <small>⭐ Score: {rec.get('recommendation_score', 0):.2f}</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+            
+            # Display main search results
             for i, business in enumerate(results):
+                # Track business view interaction
+                if 'cf_session_id' in st.session_state:
+                    track_business_interaction(
+                        business_id=business.get('business_id', business['business_name']),
+                        business_name=business['business_name'],
+                        interaction_type='view',
+                        query=search_query,
+                        category=business.get('category'),
+                        tags=business.get('tags', '').split(',') if business.get('tags') else None,
+                        user_lat=user_lat,
+                        user_lng=user_lng
+                    )
+                
                 # Prepare relevance display
                 relevance_info = ""
                 if "relevance" in business:
                     relevance_score = business["relevance"]
                     relevance_pct = int(relevance_score * 100)
                     relevance_info = f'<span class="category-badge">🧠 {relevance_pct}% relevant</span>'
+                
+                # Create unique button keys for interaction tracking
+                view_key = f"view_{business.get('business_id', i)}"
+                bookmark_key = f"bookmark_{business.get('business_id', i)}"
                 
                 st.markdown(f"""
                 <div class="search-result">
@@ -395,6 +524,49 @@ with col1:
                     <p><strong>🏷️ Tags:</strong> {business['tags']}</p>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Add interaction buttons
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("👁️ View Details", key=view_key):
+                        track_business_interaction(
+                            business_id=business.get('business_id', business['business_name']),
+                            business_name=business['business_name'],
+                            interaction_type='click',
+                            query=search_query,
+                            category=business.get('category'),
+                            tags=business.get('tags', '').split(',') if business.get('tags') else None,
+                            user_lat=user_lat,
+                            user_lng=user_lng
+                        )
+                        st.success(f"📍 Viewing {business['business_name']}")
+                
+                with col2:
+                    if st.button("🔖 Bookmark", key=bookmark_key):
+                        track_business_interaction(
+                            business_id=business.get('business_id', business['business_name']),
+                            business_name=business['business_name'],
+                            interaction_type='bookmark',
+                            query=search_query,
+                            category=business.get('category'),
+                            tags=business.get('tags', '').split(',') if business.get('tags') else None,
+                            user_lat=user_lat,
+                            user_lng=user_lng
+                        )
+                        st.success(f"🔖 Bookmarked {business['business_name']}")
+            
+            # Show "People also searched for" suggestions
+            if search_query:
+                people_also_searched = get_people_also_searched(search_query, limit=5)
+                if people_also_searched:
+                    st.markdown("### 👥 People Also Searched For")
+                    cols = st.columns(len(people_also_searched))
+                    for idx, suggestion in enumerate(people_also_searched):
+                        with cols[idx]:
+                            if st.button(f"🔍 {suggestion}", key=f"suggestion_{idx}"):
+                                # Track click and update search query
+                                st.session_state.suggestion_clicked = suggestion
+                                st.rerun()
         
         else:
             if search_method == "vectorized":
@@ -421,12 +593,31 @@ with col1:
 with col2:
     st.header("📋 Search Tips")
     
+    # Add trending searches section
+    st.subheader("🔥 Trending Searches")
+    trending_searches = get_trending_searches(limit=8)
+    if trending_searches:
+        for trend in trending_searches:
+            if st.button(f"🔍 {trend['query']} ({trend['search_count']})", key=f"trending_{trend['query']}", use_container_width=True):
+                st.session_state.trending_clicked = trend['query']
+                st.rerun()
+    else:
+        st.info("No trending searches available yet")
+    
+    st.markdown("---")
+    
     st.markdown("""
     **🧠 Vectorized AI Search:**
     - Uses OpenAI embeddings for semantic understanding
     - Matches meaning, not just keywords
     - "coffee shop" also finds "cafe", "espresso bar"
     - Results ranked by AI relevance + distance
+    
+    **🤖 Collaborative Filtering:**
+    - Learns from user interactions
+    - Shows "Recommended for you" businesses
+    - "People also searched for" suggestions
+    - Tracks views, clicks, and bookmarks
     
     **🎯 Search Examples:**
     - "coffee near me" → finds cafes, coffee shops

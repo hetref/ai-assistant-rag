@@ -54,7 +54,8 @@ st.markdown("""
 # Main navigation
 st.markdown("## 🚀 Choose Your Action")
 
-col1, col2, col3 = st.columns([1, 1, 1])
+col1, col2 = st.columns([1, 1])
+col3, col4 = st.columns([1, 1])
 
 with col1:
     st.markdown("""
@@ -107,6 +108,23 @@ with col3:
     if st.button("🤖 Go to RAG Chat", key="chat", type="primary", use_container_width=True):
         st.switch_page("ui.py")
 
+with col4:
+    st.markdown("""
+    <div class="feature-card">
+        <h3>📊 Analytics Dashboard</h3>
+        <p>Monitor collaborative filtering performance and user engagement</p>
+        <ul style="text-align: left; padding-left: 20px;">
+            <li>📈 Search analytics and trends</li>
+            <li>🤖 Recommendation effectiveness</li>
+            <li>👥 User interaction patterns</li>
+            <li>🔧 System health monitoring</li>
+        </ul>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    if st.button("📊 Go to Analytics Dashboard", key="analytics", type="primary", use_container_width=True):
+        st.switch_page("pages/analytics_dashboard.py")
+
 # System overview
 st.markdown("---")
 st.markdown("## 🏗️ System Architecture")
@@ -125,6 +143,11 @@ with col1:
       - Business data management
       - Location-based search
       - CSV file operations
+      
+    - **Redis Cache** (Port 6379)
+      - Collaborative filtering data
+      - User interaction tracking
+      - Real-time recommendations
     """)
 
 with col2:
@@ -133,6 +156,7 @@ with col2:
     - **Real-time Indexing**: Data is automatically re-indexed when new businesses are added
     - **Location Intelligence**: Haversine distance calculations for proximity search
     - **Smart Filtering**: Category detection and tag-based filtering
+    - **Collaborative Filtering**: User-based recommendations and interaction tracking
     - **Scalable Architecture**: Separate services for different functionalities
     """)
 
@@ -142,7 +166,7 @@ st.markdown("## 📊 System Status")
 
 import requests
 
-col1, col2, col3 = st.columns(3)
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     try:
@@ -151,6 +175,20 @@ with col1:
             data = response.json()
             st.success("✅ Upload API: Online")
             st.info(f"📄 CSV exists: {data.get('csv_exists', False)}")
+            
+            # Show Redis status
+            redis_status = data.get('redis_status', 'unknown')
+            if redis_status == 'online':
+                st.success("✅ Redis: Online")
+            else:
+                st.error(f"❌ Redis: {redis_status}")
+                
+            # Show CF status
+            cf_available = data.get('collaborative_filtering', False)
+            if cf_available:
+                st.info("🤖 CF: Available")
+            else:
+                st.warning("⚠️ CF: Unavailable")
         else:
             st.error("❌ Upload API: Error")
     except:
@@ -177,6 +215,29 @@ with col3:
     except:
         st.warning("⚠️ Docs unavailable")
 
+with col4:
+    # Show trending searches count
+    try:
+        trending_response = requests.get("http://localhost:8001/recommendations/trending-searches?limit=5", timeout=2)
+        if trending_response.status_code == 200:
+            trending_data = trending_response.json()
+            if trending_data.get("ok"):
+                trending_count = len(trending_data.get("trending_searches", []))
+                st.metric("🔥 Trending", trending_count)
+            else:
+                st.warning("⚠️ No trends")
+        else:
+            st.warning("⚠️ Trends unavailable")
+    except Exception:
+        st.warning("⚠️ Trends offline")
+        if docs_response.status_code == 200:
+            docs = docs_response.json()
+            st.metric("📄 Documents", len(docs))
+        else:
+            st.warning("⚠️ Cannot fetch docs")
+    except:
+        st.warning("⚠️ Docs unavailable")
+
 # Footer
 st.markdown("---")
 st.markdown("""
@@ -184,10 +245,11 @@ st.markdown("""
     <h4>🚀 Getting Started</h4>
     <p>
         1. <strong>Register businesses</strong> using the Business Registration page<br>
-        2. <strong>Search for businesses</strong> using the Location Search page<br>
-        3. <strong>Ask questions</strong> using the RAG Chat interface
+        2. <strong>Search for businesses</strong> using the Location Search page with AI recommendations<br>
+        3. <strong>Ask questions</strong> using the RAG Chat interface<br>
+        4. <strong>Monitor performance</strong> using the Analytics Dashboard
     </p>
     <hr>
-    <p><em>Business Location System | Built with Streamlit + FastAPI + Pathway</em></p>
+    <p><em>Business Location System | Built with Streamlit + FastAPI + Pathway + Redis CF</em></p>
 </div>
 """, unsafe_allow_html=True)

@@ -15,6 +15,7 @@ services:
       - DATA_DIR=/app/data
       - PATHWAY_HOST=0.0.0.0
       - PATHWAY_PORT=8000
+      - REDIS_URL=redis://redis:6379
     volumes:
       - rag-data:/app/data
       - rag-cache:/app/Cache
@@ -27,6 +28,24 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  # Redis Service for Collaborative Filtering
+  redis:
+    image: redis:7-alpine
+    container_name: business-rag-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - rag-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Streamlit UI Service
   streamlit-ui:
@@ -41,6 +60,7 @@ services:
       - STREAMLIT_SERVER_ADDRESS=0.0.0.0
       - API_BASE_URL=http://rag-app:8001
       - OPENAI_API_KEY=${OPENAI_API_KEY:-your_openai_api_key_here}
+      - REDIS_URL=redis://redis:6379
     volumes:
       - rag-data:/app/data
     networks:
@@ -48,6 +68,8 @@ services:
     restart: unless-stopped
     depends_on:
       rag-app:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     command: ["streamlit", "run", "ui/main.py", "--server.port=8501", "--server.address=0.0.0.0"]
 
@@ -60,4 +82,6 @@ volumes:
   rag-data:
     driver: local
   rag-cache:
+    driver: local
+  redis-data:
     driver: local

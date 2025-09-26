@@ -13,3 +13,16 @@ openai>=1.0.0
 
 # Additional dependencies for requests
 requests>=2.31.0
+
+# Redis for collaborative filtering and caching
+redis>=5.0.0
+aioredis>=2.0.0
+
+# Machine learning for collaborative filtering
+scikit-learn>=1.3.0
+numpy>=1.24.0
+scipy>=1.10.0
+pandas>=2.0.0
+
+# User identification and session management
+user-agents>=2.2.0

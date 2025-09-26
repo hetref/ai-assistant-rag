@@ -3,10 +3,12 @@ import uuid
 import csv
 import math
 import logging
+import hashlib
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -17,6 +19,18 @@ from utils import (
 )
 import requests
 import re
+
+# Import collaborative filtering
+try:
+    from collaborative_filtering import (
+        cf_engine, 
+        UserInteraction, 
+        CollaborativeFilteringEngine
+    )
+    CF_AVAILABLE = True
+except ImportError:
+    logger.warning("Collaborative filtering not available - Redis dependencies missing")
+    CF_AVAILABLE = False
 
 
 app = FastAPI(title="Upload API", version="1.0.0")
@@ -67,6 +81,52 @@ class LocationSearchRequest(BaseModel):
     limit: int = Field(20, description="Maximum number of results", gt=0, le=200)
     distance_weight: Optional[float] = Field(None, description="Weight of distance in final ranking (0..1). If None, auto-detected from query.")
     sort_mode: Optional[str] = Field(None, description="Optional sort override: 'hybrid' (default), 'distance', or 'relevance'")
+    # Collaborative filtering fields
+    user_session_id: Optional[str] = Field(None, description="User session ID for tracking")
+    include_recommendations: bool = Field(True, description="Include collaborative filtering recommendations")
+
+
+# Collaborative Filtering Models
+class InteractionRequest(BaseModel):
+    business_id: str = Field(..., description="Business ID that was interacted with")
+    business_name: str = Field(..., description="Business name")
+    interaction_type: str = Field(..., description="Type: 'search', 'view', 'click', 'bookmark'")
+    query: Optional[str] = Field(None, description="Search query if applicable")
+    category: Optional[str] = Field(None, description="Business category")
+    tags: Optional[List[str]] = Field(None, description="Business tags")
+    dwell_time_seconds: Optional[int] = Field(None, description="Time spent viewing (for rating calculation)")
+    user_lat: Optional[float] = Field(None, description="User location when interacting")
+    user_lng: Optional[float] = Field(None, description="User location when interacting")
+
+
+class RecommendationsRequest(BaseModel):
+    user_lat: Optional[float] = Field(None, description="User's latitude")
+    user_lng: Optional[float] = Field(None, description="User's longitude") 
+    limit: int = Field(10, description="Maximum recommendations to return", gt=0, le=50)
+    exclude_business_ids: Optional[List[str]] = Field(None, description="Business IDs to exclude")
+    recommendation_types: List[str] = Field(
+        default=["collaborative", "popular", "trending"], 
+        description="Types of recommendations to include"
+    )
+
+
+def generate_user_id(request: Request) -> str:
+    """Generate user ID from request headers."""
+    user_agent = request.headers.get("user-agent", "unknown")
+    # In production, you might want to use more sophisticated user identification
+    x_forwarded_for = request.headers.get("x-forwarded-for")
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(",")[0].strip()
+    else:
+        ip = request.client.host if request.client else "unknown"
+    
+    identifier = f"{user_agent}:{ip}"
+    return hashlib.sha256(identifier.encode()).hexdigest()[:16]
+
+
+def generate_session_id() -> str:
+    """Generate a new session ID."""
+    return str(uuid.uuid4())
 
 
 def ensure_dirs_and_csv() -> None:
@@ -510,12 +570,16 @@ def append_csv_batch(payload: BatchPayload):
 
 
 @app.post("/search-businesses")
-def search_businesses(request: LocationSearchRequest):
-    """Search for businesses using vectorized data from Pathway with location filtering."""
+async def search_businesses(request: LocationSearchRequest, http_request: Request):
+    """Search for businesses using vectorized data from Pathway with location filtering and collaborative filtering."""
     try:
         # Validate user coordinates
         if not validate_coordinates(request.user_lat, request.user_lng):
             raise HTTPException(status_code=400, detail="Invalid user coordinates")
+        
+        # Generate user ID and session ID
+        user_id = generate_user_id(http_request)
+        session_id = request.user_session_id or generate_session_id()
         
         # Use vectorized search from Pathway
         results, search_method = search_businesses_vectorized(
@@ -530,9 +594,48 @@ def search_businesses(request: LocationSearchRequest):
             sort_mode=request.sort_mode
         )
         
+        # Track search interaction for collaborative filtering
+        if CF_AVAILABLE and request.query:
+            try:
+                interaction = UserInteraction(
+                    user_id=user_id,
+                    business_id="search_query",  # Special ID for search queries
+                    business_name=request.query,
+                    interaction_type="search",
+                    timestamp=datetime.now(),
+                    query=request.query,
+                    category=request.category_filter,
+                    tags=request.tag_filters,
+                    location=(request.user_lat, request.user_lng),
+                    session_id=session_id,
+                    implicit_rating=1.0
+                )
+                await cf_engine.record_interaction(interaction)
+            except Exception as e:
+                logger.warning(f"Failed to record search interaction: {e}")
+        
+        # Get collaborative filtering recommendations if enabled
+        recommendations = []
+        if CF_AVAILABLE and request.include_recommendations and results:
+            try:
+                # Get business IDs from current results to exclude from recommendations
+                current_business_ids = {r.get("business_id", r.get("business_name", "")) for r in results}
+                
+                cf_recommendations = await cf_engine.get_collaborative_recommendations(
+                    user_id=user_id,
+                    exclude_businesses=current_business_ids,
+                    limit=5
+                )
+                recommendations = cf_recommendations
+            except Exception as e:
+                logger.warning(f"Failed to get collaborative recommendations: {e}")
+        
         return {
             "ok": True,
             "results": results,
+            "recommendations": recommendations,
+            "user_id": user_id,
+            "session_id": session_id,
             "search_params": {
                 "user_location": {"lat": request.user_lat, "lng": request.user_lng},
                 "max_distance_km": request.max_distance_km,
@@ -552,9 +655,10 @@ def search_businesses(request: LocationSearchRequest):
 
 
 @app.get("/health")
-def health_check():
+async def health_check():
     """Health check endpoint."""
     pathway_status = "offline"
+    redis_status = "offline"
     
     # Try statistics endpoint (this is the main Pathway endpoint that works)
     try:
@@ -570,13 +674,181 @@ def health_check():
     except Exception as e:
         pathway_status = f"error: {str(e)[:50]}"
     
+    # Check Redis status
+    if CF_AVAILABLE:
+        try:
+            await cf_engine.connect()
+            redis_status = "online"
+        except Exception as e:
+            redis_status = f"error: {str(e)[:50]}"
+    
     return {
         "status": "healthy",
         "csv_exists": CSV_PATH.exists(),
         "csv_path": str(CSV_PATH),
         "data_dir": str(DATA_DIR),
         "pathway_status": pathway_status,
-        "pathway_url": PATHWAY_URL
+        "pathway_url": PATHWAY_URL,
+        "redis_status": redis_status,
+        "collaborative_filtering": CF_AVAILABLE
     }
+
+
+# Collaborative Filtering Endpoints
+
+@app.post("/interactions/track")
+async def track_interaction(interaction_req: InteractionRequest, request: Request):
+    """Track user interaction with a business for collaborative filtering."""
+    if not CF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+    
+    try:
+        user_id = generate_user_id(request)
+        session_id = generate_session_id()
+        
+        # Calculate implicit rating based on interaction type and dwell time
+        if CF_AVAILABLE:
+            rating = cf_engine.calculate_implicit_rating(
+                interaction_req.interaction_type, 
+                interaction_req.dwell_time_seconds
+            )
+        else:
+            rating = 1.0
+        
+        # Create interaction
+        interaction = UserInteraction(
+            user_id=user_id,
+            business_id=interaction_req.business_id,
+            business_name=interaction_req.business_name,
+            interaction_type=interaction_req.interaction_type,
+            timestamp=datetime.now(),
+            query=interaction_req.query,
+            category=interaction_req.category,
+            tags=interaction_req.tags,
+            location=(interaction_req.user_lat, interaction_req.user_lng) if interaction_req.user_lat and interaction_req.user_lng else None,
+            session_id=session_id,
+            implicit_rating=rating
+        )
+        
+        await cf_engine.record_interaction(interaction)
+        
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "session_id": session_id,
+            "implicit_rating": rating,
+            "message": "Interaction tracked successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to track interaction: {e}")
+        return JSONResponse(
+            status_code=500, 
+            content={"ok": False, "error": f"Failed to track interaction: {str(e)}"}
+        )
+
+
+@app.post("/recommendations")
+async def get_recommendations(req: RecommendationsRequest, request: Request):
+    """Get collaborative filtering recommendations for a user."""
+    if not CF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+    
+    try:
+        user_id = generate_user_id(request)
+        
+        recommendations = []
+        
+        # Get collaborative recommendations if requested
+        if "collaborative" in req.recommendation_types:
+            cf_recs = await cf_engine.get_collaborative_recommendations(
+                user_id=user_id,
+                exclude_businesses=set(req.exclude_business_ids or []),
+                limit=req.limit
+            )
+            recommendations.extend(cf_recs)
+        
+        # Get trending searches if requested
+        trending_searches = []
+        if "trending" in req.recommendation_types:
+            trending = await cf_engine.get_trending_searches(limit=10)
+            trending_searches = [{"query": query, "count": count} for query, count in trending]
+        
+        return {
+            "ok": True,
+            "user_id": user_id,
+            "recommendations": recommendations[:req.limit],
+            "trending_searches": trending_searches,
+            "total_found": len(recommendations)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get recommendations: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get recommendations: {str(e)}"}
+        )
+
+
+@app.get("/recommendations/trending-searches")
+async def get_trending_searches(limit: int = 10):
+    """Get trending search queries."""
+    if not CF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+    
+    try:
+        trending = await cf_engine.get_trending_searches(limit=limit)
+        return {
+            "ok": True,
+            "trending_searches": [{"query": query, "search_count": count} for query, count in trending]
+        }
+    except Exception as e:
+        logger.error(f"Failed to get trending searches: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get trending searches: {str(e)}"}
+        )
+
+
+@app.get("/recommendations/people-also-searched")
+async def get_people_also_searched(query: str, limit: int = 5):
+    """Get 'People also searched for' suggestions."""
+    if not CF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+    
+    try:
+        suggestions = await cf_engine.get_people_also_searched(query, limit=limit)
+        return {
+            "ok": True,
+            "query": query,
+            "suggestions": suggestions
+        }
+    except Exception as e:
+        logger.error(f"Failed to get people also searched: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get suggestions: {str(e)}"}
+        )
+
+
+@app.get("/analytics/cf-performance")
+async def get_cf_analytics():
+    """Get collaborative filtering analytics and performance metrics."""
+    if not CF_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Collaborative filtering not available")
+    
+    try:
+        analytics = await cf_engine.get_analytics_data()
+        return {
+            "ok": True,
+            "analytics": analytics,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get CF analytics: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get analytics: {str(e)}"}
+        )
 
 
