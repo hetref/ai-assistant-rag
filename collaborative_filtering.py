@@ -5,13 +5,42 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Set
 from collections import defaultdict
-import numpy as np
-import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import TfidfVectorizer
-import redis
-import aioredis
-from pydantic import BaseModel
+
+# Handle optional imports gracefully
+try:
+    import numpy as np
+    import pandas as pd
+    from sklearn.metrics.pairwise import cosine_similarity
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    logger.warning("scikit-learn not available - some CF features will be limited")
+
+try:
+    import redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    logger.warning("redis not available - CF will not work")
+
+try:
+    import aioredis
+    AIOREDIS_AVAILABLE = True
+except (ImportError, TypeError) as e:
+    AIOREDIS_AVAILABLE = False
+    logger.warning(f"aioredis not available or incompatible: {e}")
+
+try:
+    from pydantic import BaseModel
+    PYDANTIC_AVAILABLE = True
+except ImportError:
+    PYDANTIC_AVAILABLE = False
+    # Fallback BaseModel
+    class BaseModel:
+        def __init__(self, **kwargs):
+            for key, value in kwargs.items():
+                setattr(self, key, value)
 
 logger = logging.getLogger("collaborative_filtering")
 

@@ -23,14 +23,18 @@ import re
 
 # Import collaborative filtering
 try:
-    from collaborative_filtering import (
+    from collaborative_filtering_simple import (
         cf_engine, 
         UserInteraction, 
         CollaborativeFilteringEngine
     )
     CF_AVAILABLE = True
-except ImportError:
-    logger.warning("Collaborative filtering not available - Redis dependencies missing")
+    print("Collaborative filtering loaded successfully (simple version)")
+except ImportError as e:
+    print(f"Collaborative filtering not available - Redis dependencies missing: {e}")
+    CF_AVAILABLE = False
+except Exception as e:
+    print(f"Collaborative filtering failed to load: {e}")
     CF_AVAILABLE = False
 
 
