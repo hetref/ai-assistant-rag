@@ -1,7 +1,0 @@
-business_name: FutureTech Electronics
-owner_name: Yuki Tanaka
-business_category: Electronics
-business_tags: gaming,headphones,smartphones
-latitude: 35.6762
-longitude: 139.6503
-lat_long: 35.6762,139.6503

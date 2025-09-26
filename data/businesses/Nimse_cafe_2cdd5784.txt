@@ -1,7 +1,0 @@
-business_name: Nimse cafe
-owner_name: Nimse
-business_category: Cafe
-business_tags: cafe, cozy, wifi, latte, nimse, coffee, organic, service, espresso, pastries, atmosphere, study spot
-latitude: 19.246900951502816
-longitude: 73.14321115609859
-lat_long: 19.246900951502816,73.14321115609859
