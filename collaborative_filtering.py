@@ -2,6 +2,7 @@ import json
 import logging
 import hashlib
 import uuid
+import os
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Set
 from collections import defaultdict
@@ -25,11 +26,11 @@ except ImportError:
     logger.warning("redis not available - CF will not work")
 
 try:
-    import aioredis
+    import redis.asyncio as aioredis
     AIOREDIS_AVAILABLE = True
 except (ImportError, TypeError) as e:
     AIOREDIS_AVAILABLE = False
-    logger.warning(f"aioredis not available or incompatible: {e}")
+    logger.warning(f"redis asyncio not available or incompatible: {e}")
 
 try:
     from pydantic import BaseModel
@@ -425,4 +426,5 @@ class CollaborativeFilteringEngine:
         }
 
 # Global instance
-cf_engine = CollaborativeFilteringEngine()
+redis_url = os.getenv('REDIS_URL', 'redis://localhost:6379')
+cf_engine = CollaborativeFilteringEngine(redis_url=redis_url)
