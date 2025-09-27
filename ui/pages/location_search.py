@@ -5,8 +5,8 @@ import math
 from typing import List, Dict, Any, Optional
 
 # Configuration
-UPLOAD_API_URL = "http://localhost:8001"
-PATHWAY_API_URL = "http://localhost:8000"
+UPLOAD_API_URL = "http://rag-app:8001"
+PATHWAY_API_URL = "http://rag-app:8000"
 
 st.set_page_config(
     page_title="Location Search", 
