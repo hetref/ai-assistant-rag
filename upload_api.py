@@ -37,6 +37,19 @@ except Exception as e:
     print(f"Collaborative filtering failed to load: {e}")
     CF_AVAILABLE = False
 
+# Import contextual recommendations
+try:
+    from contextual_recommendations import contextual_engine
+    from weather_service import weather_service
+    CONTEXTUAL_AVAILABLE = True
+    print("Contextual recommendations loaded successfully")
+except ImportError as e:
+    print(f"Contextual recommendations not available: {e}")
+    CONTEXTUAL_AVAILABLE = False
+except Exception as e:
+    print(f"Contextual recommendations failed to load: {e}")
+    CONTEXTUAL_AVAILABLE = False
+
 
 app = FastAPI(title="Upload API", version="1.0.0")
 
@@ -113,6 +126,24 @@ class RecommendationsRequest(BaseModel):
         default=["collaborative", "popular", "trending"], 
         description="Types of recommendations to include"
     )
+
+
+class ContextualRecommendationsRequest(BaseModel):
+    """Request model for contextual recommendations."""
+    user_lat: float = Field(..., description="User's latitude", ge=-90, le=90)
+    user_lng: float = Field(..., description="User's longitude", ge=-180, le=180)
+    search_query: Optional[str] = Field(None, description="Current search query for context")
+    limit: int = Field(15, description="Maximum recommendations to return", gt=0, le=50)
+    include_weather: bool = Field(True, description="Include weather-based recommendations")
+    include_time_context: bool = Field(True, description="Include time-of-day context")
+    include_user_history: bool = Field(True, description="Include user history context")
+    user_session_id: Optional[str] = Field(None, description="User session ID for tracking")
+
+
+class WeatherRequest(BaseModel):
+    """Request model for weather data."""
+    user_lat: float = Field(..., description="Latitude", ge=-90, le=90)
+    user_lng: float = Field(..., description="Longitude", ge=-180, le=180)
 
 
 def generate_user_id(request: Request) -> str:
@@ -906,5 +937,201 @@ async def get_cf_analytics():
             status_code=500,
             content={"ok": False, "error": f"Failed to get analytics: {str(e)}"}
         )
+
+
+# Contextual Recommendations Endpoints
+
+@app.post("/recommendations/contextual")
+async def get_contextual_recommendations(req: ContextualRecommendationsRequest, request: Request):
+    """Get contextual recommendations based on time, weather, and user history."""
+    if not CONTEXTUAL_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Contextual recommendations not available")
+    
+    try:
+        # Validate user coordinates
+        if not validate_coordinates(req.user_lat, req.user_lng):
+            raise HTTPException(status_code=400, detail="Invalid user coordinates")
+        
+        # Generate user ID
+        user_id = generate_user_id(request)
+        session_id = req.user_session_id or generate_session_id()
+        
+        # Get contextual recommendations
+        result = await contextual_engine.get_contextual_recommendations(
+            user_id=user_id,
+            user_lat=req.user_lat,
+            user_lng=req.user_lng,
+            search_query=req.search_query,
+            limit=req.limit,
+            session_id=session_id
+        )
+        
+        return {
+            "ok": True,
+            "recommendations": result["recommendations"],
+            "context": result["context"],
+            "user_id": user_id,
+            "session_id": session_id,
+            "generated_at": result["generated_at"],
+            "total_found": len(result["recommendations"])
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get contextual recommendations: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get contextual recommendations: {str(e)}"}
+        )
+
+
+@app.get("/weather/current")
+async def get_current_weather(user_lat: float, user_lng: float):
+    """Get current weather data for a location."""
+    try:
+        # Validate coordinates
+        if not validate_coordinates(user_lat, user_lng):
+            raise HTTPException(status_code=400, detail="Invalid coordinates")
+        
+        weather_data = await weather_service.get_current_weather(user_lat, user_lng)
+        
+        if not weather_data:
+            return JSONResponse(
+                status_code=503,
+                content={"ok": False, "error": "Weather data not available"}
+            )
+        
+        return {
+            "ok": True,
+            "weather": {
+                "temperature_celsius": weather_data.temperature_celsius,
+                "temperature_fahrenheit": weather_data.temperature_fahrenheit,
+                "condition": weather_data.condition.value,
+                "description": weather_data.description,
+                "humidity": weather_data.humidity,
+                "wind_speed_kmh": weather_data.wind_speed_kmh,
+                "feels_like_celsius": weather_data.feels_like_celsius,
+                "is_hot": weather_data.is_hot,
+                "is_cold": weather_data.is_cold,
+                "is_rainy": weather_data.is_rainy,
+                "is_pleasant": weather_data.is_pleasant,
+                "timestamp": weather_data.timestamp.isoformat(),
+                "location": {"lat": weather_data.location[0], "lng": weather_data.location[1]}
+            },
+            "business_suggestions": weather_service.get_weather_business_suggestions(weather_data)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get weather data: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"ok": False, "error": f"Failed to get weather data: {str(e)}"}
+        )
+
+
+@app.post("/search-businesses/contextual")
+async def search_businesses_contextual(request: LocationSearchRequest, http_request: Request):
+    """Enhanced business search with contextual recommendations."""
+    try:
+        # Validate user coordinates
+        if not validate_coordinates(request.user_lat, request.user_lng):
+            raise HTTPException(status_code=400, detail="Invalid user coordinates")
+        
+        # Generate user ID and session ID
+        user_id = generate_user_id(http_request)
+        session_id = request.user_session_id or generate_session_id()
+        
+        # Get regular search results
+        results, search_method = search_businesses_vectorized(
+            query=request.query or "business",
+            user_lat=request.user_lat,
+            user_lng=request.user_lng,
+            max_distance_km=request.max_distance_km,
+            category_filter=request.category_filter,
+            tag_filters=request.tag_filters,
+            limit=request.limit,
+            distance_weight=request.distance_weight,
+            sort_mode=request.sort_mode
+        )
+        
+        # Track search interaction
+        if CF_AVAILABLE and request.query:
+            try:
+                interaction = UserInteraction(
+                    user_id=user_id,
+                    business_id="search_query",
+                    business_name=request.query,
+                    interaction_type="search",
+                    timestamp=datetime.now(),
+                    query=request.query,
+                    category=request.category_filter,
+                    tags=request.tag_filters,
+                    location=(request.user_lat, request.user_lng),
+                    session_id=session_id,
+                    implicit_rating=1.0
+                )
+                await cf_engine.record_interaction(interaction)
+            except Exception as e:
+                logger.warning(f"Failed to record search interaction: {e}")
+        
+        # Get contextual recommendations if available
+        contextual_recommendations = []
+        context_info = {}
+        
+        if CONTEXTUAL_AVAILABLE:
+            try:
+                # Initialize contextual engine with CF engine
+                contextual_engine.cf_engine = cf_engine
+                
+                # Apply contextual factors to search results
+                contextual_result = await contextual_engine.get_contextual_recommendations(
+                    user_id=user_id,
+                    user_lat=request.user_lat,
+                    user_lng=request.user_lng,
+                    search_query=request.query,
+                    base_results=results,
+                    limit=request.limit,
+                    session_id=session_id
+                )
+                
+                # Use contextually enhanced results
+                results = contextual_result["recommendations"]
+                context_info = contextual_result["context"]
+                
+                # Also get separate contextual recommendations
+                contextual_recommendations = await contextual_engine.get_contextual_recommendations(
+                    user_id=user_id,
+                    user_lat=request.user_lat,
+                    user_lng=request.user_lng,
+                    search_query=request.query,
+                    limit=5,
+                    session_id=session_id
+                )
+                contextual_recommendations = contextual_recommendations["recommendations"]
+                
+            except Exception as e:
+                logger.warning(f"Failed to get contextual recommendations: {e}")
+        
+        return {
+            "ok": True,
+            "results": results,
+            "contextual_recommendations": contextual_recommendations,
+            "context": context_info,
+            "user_id": user_id,
+            "session_id": session_id,
+            "search_params": {
+                "user_location": {"lat": request.user_lat, "lng": request.user_lng},
+                "max_distance_km": request.max_distance_km,
+                "category_filter": request.category_filter,
+                "tag_filters": request.tag_filters,
+                "query": request.query
+            },
+            "total_found": len(results),
+            "search_method": search_method,
+            "contextual_features_available": CONTEXTUAL_AVAILABLE
+        }
+        
+    except Exception as e:
+        logger.error(f"Contextual search failed: {e}")
+        return JSONResponse(status_code=400, content={"ok": False, "error": str(e)})
 
 

@@ -5,8 +5,8 @@ import math
 from typing import List, Dict, Any, Optional
 
 # Configuration
-UPLOAD_API_URL = "http://localhost:8001"
-PATHWAY_API_URL = "http://localhost:8000"
+UPLOAD_API_URL = "http://rag-app:8001"
+PATHWAY_API_URL = "http://rag-app:8000"
 
 st.set_page_config(
     page_title="Location Search", 
@@ -84,10 +84,10 @@ def parse_lat_lng(lat_lng_str: str) -> Optional[tuple]:
         pass
     return None
 
-def search_businesses(query: str, user_lat: float, user_lng: float, max_distance: Optional[float] = 10.0, user_session_id: Optional[str] = None) -> tuple[List[Dict], List[Dict], str]:
-    """Search for businesses using vectorized data from Pathway with location filtering and get recommendations."""
+def search_businesses(query: str, user_lat: float, user_lng: float, max_distance: Optional[float] = 10.0, user_session_id: Optional[str] = None) -> tuple[List[Dict], List[Dict], Dict, str]:
+    """Search for businesses using vectorized data from Pathway with contextual recommendations."""
     try:
-        # Use the vectorized search endpoint with collaborative filtering
+        # Use the enhanced contextual search endpoint
         payload = {
             "user_lat": user_lat,
             "user_lng": user_lng,
@@ -106,24 +106,43 @@ def search_businesses(query: str, user_lat: float, user_lng: float, max_distance
             # Use a very large radius for "unlimited" search
             payload["max_distance_km"] = 20000.0  # 20,000 km (essentially unlimited on Earth)
         
-        response = requests.post(
-            f"{UPLOAD_API_URL}/search-businesses",
-            json=payload,
-            timeout=15
-        )
+        # Try contextual search first
+        contextual_available = False
+        try:
+            response = requests.post(
+                f"{UPLOAD_API_URL}/search-businesses/contextual",
+                json=payload,
+                timeout=15
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("ok", False):
+                    contextual_available = True
+        except Exception:
+            contextual_available = False
+        
+        # Fallback to regular search if contextual not available
+        if not contextual_available:
+            response = requests.post(
+                f"{UPLOAD_API_URL}/search-businesses",
+                json=payload,
+                timeout=15
+            )
         
         if response.status_code != 200:
             st.error(f"API Error: {response.status_code}")
-            return [], [], "error"
+            return [], [], {}, "error"
         
         data = response.json()
         
         if not data.get("ok", False):
             st.error(f"Search failed: {data.get('error', 'Unknown error')}")
-            return [], [], "error"
+            return [], [], {}, "error"
         
         results = data.get("results", [])
-        recommendations = data.get("recommendations", [])
+        recommendations = data.get("contextual_recommendations", data.get("recommendations", []))
+        context_info = data.get("context", {})
         search_method = data.get("search_method", "unknown")
         
         # Store user session info for tracking
@@ -145,24 +164,28 @@ def search_businesses(query: str, user_lat: float, user_lng: float, max_distance
                 "business_id": business.get("business_id", business.get("business_name", ""))
             }
             
-            # Add vectorized search specific fields
+            # Add contextual search specific fields
+            if "contextual_score" in business:
+                result["contextual_score"] = business["contextual_score"]
+                result["applied_factors"] = business.get("applied_factors", [])
+            
             if "vector_score" in business:
                 result["vector_score"] = business["vector_score"]
                 result["relevance"] = 1.0 / (1.0 + business["vector_score"])  # Convert to 0-1 scale
             
             formatted_results.append(result)
         
-        return formatted_results, recommendations, search_method
+        return formatted_results, recommendations, context_info, search_method
         
     except requests.exceptions.Timeout:
         st.error("❌ Search timed out. Please try again.")
-        return [], [], "timeout"
+        return [], [], {}, "timeout"
     except requests.exceptions.ConnectionError:
         st.error("❌ Cannot connect to search API. Please check if the service is running.")
-        return [], [], "connection_error"
+        return [], [], {}, "connection_error"
     except Exception as e:
         st.error(f"❌ Search error: {str(e)}")
-        return [], [], "error"
+        return [], [], {}, "error"
 
 
 def track_business_interaction(business_id: str, business_name: str, interaction_type: str, query: Optional[str] = None, category: Optional[str] = None, tags: Optional[List[str]] = None, user_lat: Optional[float] = None, user_lng: Optional[float] = None):
@@ -233,6 +256,192 @@ def get_people_also_searched(query: str, limit: int = 5) -> List[str]:
         
     except Exception as e:
         return []
+
+
+def get_weather_info(user_lat: float, user_lng: float) -> Optional[Dict]:
+    """Get current weather information for location."""
+    try:
+        response = requests.get(
+            f"{UPLOAD_API_URL}/weather/current",
+            params={"user_lat": user_lat, "user_lng": user_lng},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data.get("ok"):
+                return data
+        
+        return None
+        
+    except Exception as e:
+        return None
+
+
+def display_weather_card(weather_data: Dict):
+    """Display weather information in a nice card format."""
+    if not weather_data or not weather_data.get("ok"):
+        return
+    
+    weather = weather_data.get("weather", {})
+    suggestions = weather_data.get("business_suggestions", {})
+    
+    # Weather emoji mapping
+    condition_emojis = {
+        "clear": "☀️",
+        "sunny": "🌞", 
+        "partly_cloudy": "⛅",
+        "cloudy": "☁️",
+        "overcast": "☁️",
+        "light_rain": "🌦️",
+        "rain": "🌧️",
+        "heavy_rain": "🌨️",
+        "thunderstorm": "⛈️",
+        "snow": "❄️",
+        "fog": "🌫️",
+        "windy": "💨",
+        "unknown": "🌤️"
+    }
+    
+    condition = weather.get("condition", "unknown")
+    emoji = condition_emojis.get(condition, "🌤️")
+    temp = weather.get("temperature_celsius", 0)
+    description = weather.get("description", "Unknown")
+    
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #74b9ff, #0984e3); color: white; padding: 1rem; border-radius: 10px; margin: 1rem 0;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <h3 style="margin: 0; color: white;">{emoji} {description.title()}</h3>
+                <p style="margin: 5px 0; font-size: 1.2em;"><strong>{temp:.0f}°C</strong> (feels like {weather.get('feels_like_celsius', temp):.0f}°C)</p>
+                <p style="margin: 0; font-size: 0.9em;">Humidity: {weather.get('humidity', 0):.0f}% | Wind: {weather.get('wind_speed_kmh', 0):.0f} km/h</p>
+                <p style="margin: 5px 0 0 0; font-size: 0.7em; opacity: 0.8;">🤖 Simulated weather data based on location & time</p>
+            </div>
+            <div style="font-size: 3em;">{emoji}</div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Weather-based business suggestions
+    preferred = suggestions.get("preferred", [])
+    avoid = suggestions.get("avoid", [])
+    
+    if preferred or avoid:
+        st.markdown("**🌤️ Weather-Based Suggestions:**")
+        
+        if preferred:
+            preferred_text = ", ".join(preferred[:5])  # Show first 5
+            st.success(f"✅ **Recommended:** {preferred_text}")
+        
+        if avoid:
+            avoid_text = ", ".join(avoid[:3])  # Show first 3
+            st.warning(f"❌ **Consider avoiding:** {avoid_text}")
+
+
+def display_context_info(context_info: Dict):
+    """Display contextual information about the recommendations."""
+    if not context_info:
+        return
+    
+    time_of_day = context_info.get("time_of_day", "").replace("_", " ").title()
+    factors_applied = context_info.get("factors_applied", [])
+    summary = context_info.get("summary", "")
+    
+    if time_of_day or factors_applied or summary:
+        st.markdown("### 🧠 Smart Context")
+        
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            if summary:
+                st.info(f"📍 **Current Context:** {summary}")
+        
+        with col2:
+            if factors_applied:
+                st.markdown("**🎯 Applied Factors:**")
+                for factor in factors_applied[:3]:  # Show first 3
+                    st.write(f"• {factor}")
+                    
+                if len(factors_applied) > 3:
+                    st.write(f"• ... and {len(factors_applied) - 3} more")
+
+
+def display_contextual_business_card(business: Dict, search_query: str, user_lat: float, user_lng: float):
+    """Display a business card with contextual information."""
+    # Prepare contextual information
+    contextual_score = business.get("contextual_score", 1.0)
+    applied_factors = business.get("applied_factors", [])
+    relevance_info = ""
+    
+    # Show contextual boost if significant
+    if contextual_score > 1.1:
+        boost_pct = int((contextual_score - 1.0) * 100)
+        relevance_info = f'<span class="category-badge" style="background: #28a745;">🚀 {boost_pct}% boosted</span>'
+    elif contextual_score < 0.9:
+        penalty_pct = int((1.0 - contextual_score) * 100)
+        relevance_info = f'<span class="category-badge" style="background: #dc3545;">⬇️ {penalty_pct}% reduced</span>'
+    
+    # Regular relevance info
+    if "relevance" in business:
+        relevance_score = business["relevance"]
+        relevance_pct = int(relevance_score * 100)
+        if not relevance_info:  # Only show if no contextual info
+            relevance_info = f'<span class="category-badge">🧠 {relevance_pct}% relevant</span>'
+    
+    business_id = business.get('business_id', business['business_name'])
+    view_key = f"view_{business_id}_{hash(search_query) % 1000}"
+    bookmark_key = f"bookmark_{business_id}_{hash(search_query) % 1000}"
+    
+    st.markdown(f"""
+    <div class="search-result">
+        <h4>🏪 {business['business_name']}</h4>
+        <p><strong>👤 Owner:</strong> {business['name']}</p>
+        <p>
+            <span class="category-badge">{business['category']}</span>
+            <span class="distance-badge">📏 {business['distance']:.1f} km away</span>
+            {relevance_info}
+        </p>
+        <p><strong>📍 Location:</strong> {business['latitude']:.4f}, {business['longitude']:.4f}</p>
+        <p><strong>🏷️ Tags:</strong> {business['tags']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Show contextual factors if available
+    if applied_factors:
+        with st.expander(f"🎯 Why this business is recommended", expanded=False):
+            st.markdown("**Contextual factors applied:**")
+            for factor in applied_factors:
+                st.write(f"• {factor}")
+    
+    # Add interaction buttons
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("👁️ View Details", key=view_key):
+            track_business_interaction(
+                business_id=business_id,
+                business_name=business['business_name'],
+                interaction_type='click',
+                query=search_query,
+                category=business.get('category'),
+                tags=business.get('tags', '').split(',') if business.get('tags') else None,
+                user_lat=user_lat,
+                user_lng=user_lng
+            )
+            st.success(f"📍 Viewing {business['business_name']}")
+    
+    with col2:
+        if st.button("🔖 Bookmark", key=bookmark_key):
+            track_business_interaction(
+                business_id=business_id,
+                business_name=business['business_name'],
+                interaction_type='bookmark',
+                query=search_query,
+                category=business.get('category'),
+                tags=business.get('tags', '').split(',') if business.get('tags') else None,
+                user_lat=user_lat,
+                user_lng=user_lng
+            )
+            st.success(f"🔖 Bookmarked {business['business_name']}")
 
 # Main UI
 st.title("🗺️ Location-Based Business Search")
@@ -444,48 +653,64 @@ with col1:
     
     # Search results
     if search_button and search_query and user_lat is not None and user_lng is not None:
+        # Get weather information first
+        weather_info = get_weather_info(user_lat, user_lng)
+        if weather_info:
+            display_weather_card(weather_info)
+        
         # Get session ID for tracking
         session_id = st.session_state.get('cf_session_id')
         
-        with st.spinner("🔄 Searching vectorized business data..."):
-            results, recommendations, search_method = search_businesses(search_query, user_lat, user_lng, max_distance, session_id)
+        with st.spinner("🔄 Searching with smart contextual recommendations..."):
+            results, recommendations, context_info, search_method = search_businesses(search_query, user_lat, user_lng, max_distance, session_id)
+        
+        # Display context information
+        if context_info:
+            display_context_info(context_info)
         
         if results:
             # Show search method and success
             distance_text = f"within {max_distance}km" if max_distance else "sorted by distance"
             
             if search_method == "vectorized":
-                st.success(f"✅ Found {len(results)} businesses using **vectorized AI search** {distance_text}")
+                st.success(f"✅ Found {len(results)} businesses using **smart contextual search** {distance_text}")
                 if max_distance is None:
-                    st.info("🌍 **Unlimited search** - All businesses returned, ranked by AI similarity + distance")
+                    st.info("🌍 **Unlimited search** - All businesses returned, ranked by AI similarity + context + distance")
                 else:
-                    st.info("🧠 Results are ranked by AI similarity to your query + distance proximity")
+                    st.info("🧠 Results ranked by AI similarity + contextual factors + distance proximity")
             elif search_method == "csv_only":
                 st.success(f"✅ Found {len(results)} businesses using **CSV fallback** {distance_text}")
                 if max_distance is None:
-                    st.warning("⚠️ Vectorized search unavailable, using basic text matching for all businesses")
+                    st.warning("⚠️ Contextual search unavailable, using basic text matching for all businesses")
                 else:
-                    st.warning("⚠️ Vectorized search unavailable, using basic text matching")
+                    st.warning("⚠️ Contextual search unavailable, using basic text matching")
             else:
                 st.success(f"✅ Found {len(results)} businesses {distance_text}")
             
             # Show recommendations if available
             if recommendations:
-                st.markdown("### 🤖 Recommended for You")
-                st.info("Based on what similar users searched for:")
+                st.markdown("### 🤖 Contextual Recommendations")
+                st.info("Based on time, weather, and your search patterns:")
                 
                 rec_cols = st.columns(min(len(recommendations), 3))
                 for idx, rec in enumerate(recommendations[:3]):
                     with rec_cols[idx % 3]:
+                        # Get contextual score info
+                        contextual_score = rec.get('contextual_score', 1.0)
+                        score_text = ""
+                        if contextual_score > 1.1:
+                            score_text = f"🚀 {int((contextual_score-1)*100)}% boost"
+                        
                         st.markdown(f"""
-                        <div style="background: #f0f8ff; padding: 10px; border-radius: 5px; margin: 5px 0;">
+                        <div style="background: #f0f8ff; padding: 10px; border-radius: 5px; margin: 5px 0; border-left: 4px solid #007bff;">
                             <strong>🏪 {rec.get('business_name', 'Unknown')}</strong><br>
                             <small>📂 {rec.get('category', '')}</small><br>
-                            <small>⭐ Score: {rec.get('recommendation_score', 0):.2f}</small>
+                            <small>⭐ Score: {rec.get('recommendation_score', rec.get('contextual_score', 0)):.2f}</small><br>
+                            {f"<small style='color: #28a745;'>{score_text}</small>" if score_text else ""}
                         </div>
                         """, unsafe_allow_html=True)
             
-            # Display main search results
+            # Display main search results with contextual information
             for i, business in enumerate(results):
                 # Track business view interaction
                 if 'cf_session_id' in st.session_state:
@@ -500,60 +725,8 @@ with col1:
                         user_lng=user_lng
                     )
                 
-                # Prepare relevance display
-                relevance_info = ""
-                if "relevance" in business:
-                    relevance_score = business["relevance"]
-                    relevance_pct = int(relevance_score * 100)
-                    relevance_info = f'<span class="category-badge">🧠 {relevance_pct}% relevant</span>'
-                
-                # Create unique button keys for interaction tracking
-                view_key = f"view_{business.get('business_id', i)}"
-                bookmark_key = f"bookmark_{business.get('business_id', i)}"
-                
-                st.markdown(f"""
-                <div class="search-result">
-                    <h4>🏪 {business['business_name']}</h4>
-                    <p><strong>👤 Owner:</strong> {business['name']}</p>
-                    <p>
-                        <span class="category-badge">{business['category']}</span>
-                        <span class="distance-badge">📏 {business['distance']:.1f} km away</span>
-                        {relevance_info}
-                    </p>
-                    <p><strong>📍 Location:</strong> {business['latitude']:.4f}, {business['longitude']:.4f}</p>
-                    <p><strong>🏷️ Tags:</strong> {business['tags']}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # Add interaction buttons
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    if st.button("👁️ View Details", key=view_key):
-                        track_business_interaction(
-                            business_id=business.get('business_id', business['business_name']),
-                            business_name=business['business_name'],
-                            interaction_type='click',
-                            query=search_query,
-                            category=business.get('category'),
-                            tags=business.get('tags', '').split(',') if business.get('tags') else None,
-                            user_lat=user_lat,
-                            user_lng=user_lng
-                        )
-                        st.success(f"📍 Viewing {business['business_name']}")
-                
-                with col2:
-                    if st.button("🔖 Bookmark", key=bookmark_key):
-                        track_business_interaction(
-                            business_id=business.get('business_id', business['business_name']),
-                            business_name=business['business_name'],
-                            interaction_type='bookmark',
-                            query=search_query,
-                            category=business.get('category'),
-                            tags=business.get('tags', '').split(',') if business.get('tags') else None,
-                            user_lat=user_lat,
-                            user_lng=user_lng
-                        )
-                        st.success(f"🔖 Bookmarked {business['business_name']}")
+                # Use contextual business card display
+                display_contextual_business_card(business, search_query, user_lat, user_lng)
             
             # Show "People also searched for" suggestions
             if search_query:
@@ -571,11 +744,11 @@ with col1:
         else:
             if search_method == "vectorized":
                 if max_distance is None:
-                    st.warning(f"😔 No businesses found for '{search_query}' in the entire vectorized database")
-                    st.info("💡 The AI search found no relevant matches. Try different keywords or check if businesses are registered")
+                    st.warning(f"😔 No businesses found for '{search_query}' in the entire contextual database")
+                    st.info("💡 The smart search found no relevant matches. Try different keywords or check if businesses are registered")
                 else:
-                    st.warning(f"😔 No businesses found for '{search_query}' in vectorized data within {max_distance}km")
-                    st.info("💡 The AI search found no relevant matches. Try different keywords or expand your search radius")
+                    st.warning(f"😔 No businesses found for '{search_query}' in contextual data within {max_distance}km")
+                    st.info("💡 The smart search found no relevant matches. Try different keywords or expand your search radius")
             else:
                 if max_distance is None:
                     st.warning(f"😔 No businesses found for '{search_query}' in the entire database")
@@ -607,11 +780,25 @@ with col2:
     st.markdown("---")
     
     st.markdown("""
-    **🧠 Vectorized AI Search:**
-    - Uses OpenAI embeddings for semantic understanding
-    - Matches meaning, not just keywords
-    - "coffee shop" also finds "cafe", "espresso bar"
-    - Results ranked by AI relevance + distance
+    **🧠 Smart Contextual Search:**
+    - Uses OpenAI embeddings + time/weather context
+    - Adapts suggestions to current conditions
+    - "coffee shop" → boosted in morning/cold weather  
+    - "restaurant" → boosted during meal times
+    - Results ranked by AI relevance + context + distance
+    
+    **🌤️ Weather-Aware Recommendations:**
+    - ☀️ Sunny: Outdoor dining, parks, ice cream
+    - 🌧️ Rainy: Indoor venues, shopping malls  
+    - ❄️ Cold: Coffee shops, warm food, heated places
+    - 🌡️ Hot: Air-conditioned venues, cold drinks
+    
+    **🕒 Time-Based Intelligence:**
+    - **Morning (6-11)**: Coffee shops, breakfast, gyms
+    - **Lunch (12-14)**: Restaurants, fast food, cafes
+    - **Afternoon (14-17)**: Shopping, services, coffee
+    - **Evening (17-21)**: Dinner, entertainment, bars
+    - **Night (21+)**: Late-night food, 24hr services
     
     **🤖 Collaborative Filtering:**
     - Learns from user interactions
@@ -619,27 +806,28 @@ with col2:
     - "People also searched for" suggestions
     - Tracks views, clicks, and bookmarks
     
-    **🎯 Search Examples:**
-    - "coffee near me" → finds cafes, coffee shops
-    - "italian food" → finds Italian restaurants
-    - "car service" → finds auto repair, gas stations
-    - "healthcare" → finds hospitals, clinics
-    - "wifi workspace" → finds cafes with wifi
+    **🎯 Smart Examples:**
+    - "lunch" at 12pm → restaurants boosted
+    - "coffee" on rainy day → indoor cafes prioritized
+    - "dinner" + cold weather → warm food highlighted
+    - Friday evening → bars and entertainment boosted
     
     **📍 Search Options:**
-    - **🌍 Unlimited Search**: Returns ALL businesses, sorted by distance
-    - **📏 Limited Radius**: Only businesses within specified distance
-    - Use precise coordinates for best distance calculations
-    - Browser geolocation works best on mobile
+    - **🌍 Unlimited Search**: ALL businesses, context-ranked
+    - **📏 Limited Radius**: Nearby + contextually relevant
+    - Use precise coordinates for best results
+    - Weather and time automatically detected
     
     **🔧 Search Methods:**
-    - **Vectorized**: AI-powered semantic search (preferred)
+    - **Contextual**: AI + time + weather + history (best)
+    - **Vectorized**: AI-powered semantic search 
     - **CSV Fallback**: Basic text matching (backup)
-    - System automatically chooses best available method
     
-    **💡 Pro Tip:**
-    - Enable unlimited search to see all businesses ranked by proximity
-    - Use limited radius when you only want nearby options
+    **💡 Pro Tips:**
+    - Search is automatically optimized for current time/weather
+    - Context factors shown in expandable sections
+    - Bookmarking improves future recommendations
+    - Weather data refreshed every 15 minutes
     """)
     
     if show_map:
@@ -647,14 +835,15 @@ with col2:
         st.markdown("""
         <div class="map-placeholder">
             <h3>🗺️ Interactive Map</h3>
-            <p>Map integration would be implemented here using services like:</p>
+            <p>Map integration would show:</p>
             <ul style="list-style: none; padding: 0;">
-                <li>📍 Google Maps API</li>
-                <li>🗺️ Mapbox</li>
-                <li>🌍 OpenStreetMap</li>
-                <li>📱 Leaflet.js</li>
+                <li>📍 Your current location</li>
+                <li>🏪 Contextually ranked businesses</li>
+                <li>�️ Weather-aware markers</li>
+                <li>⏰ Time-based highlights</li>
+                <li>🎯 Smart routing suggestions</li>
             </ul>
-            <small>This would show your location and nearby businesses with markers</small>
+            <small>Integrated with contextual recommendation engine</small>
         </div>
         """, unsafe_allow_html=True)
     

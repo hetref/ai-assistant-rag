@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 
 # Configuration
-UPLOAD_API_URL = "http://localhost:8001"
+UPLOAD_API_URL = "http://rag-app:8001"
 
 st.set_page_config(
     page_title="Analytics Dashboard", 

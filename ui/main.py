@@ -170,7 +170,7 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     try:
-        response = requests.get("http://localhost:8001/health", timeout=2)
+        response = requests.get("http://rag-app:8001/health", timeout=2)
         if response.status_code == 200:
             data = response.json()
             st.success("✅ Upload API: Online")
@@ -196,7 +196,7 @@ with col1:
 
 with col2:
     try:
-        response = requests.post("http://localhost:8000/v1/statistics", timeout=2)
+        response = requests.post("http://rag-app:8000/v1/statistics", timeout=2)
         if response.status_code == 200:
             st.success("✅ Pathway API: Online")
         else:
@@ -206,7 +206,7 @@ with col2:
 
 with col3:
     try:
-        docs_response = requests.post("http://localhost:8000/v2/list_documents", timeout=3)
+        docs_response = requests.post("http://rag-app:8000/v2/list_documents", timeout=3)
         if docs_response.status_code == 200:
             docs = docs_response.json()
             st.metric("📄 Documents", len(docs))
@@ -218,7 +218,7 @@ with col3:
 with col4:
     # Show trending searches count
     try:
-        trending_response = requests.get("http://localhost:8001/recommendations/trending-searches?limit=5", timeout=2)
+        trending_response = requests.get("http://rag-app:8001/recommendations/trending-searches?limit=5", timeout=2)
         if trending_response.status_code == 200:
             trending_data = trending_response.json()
             if trending_data.get("ok"):
@@ -228,15 +228,8 @@ with col4:
                 st.warning("⚠️ No trends")
         else:
             st.warning("⚠️ Trends unavailable")
-    except Exception:
-        st.warning("⚠️ Trends offline")
-        if docs_response.status_code == 200:
-            docs = docs_response.json()
-            st.metric("📄 Documents", len(docs))
-        else:
-            st.warning("⚠️ Cannot fetch docs")
     except:
-        st.warning("⚠️ Docs unavailable")
+        st.warning("⚠️ Trends offline")
 
 # Footer
 st.markdown("---")
