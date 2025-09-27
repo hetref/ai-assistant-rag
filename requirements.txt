@@ -25,3 +25,9 @@ pandas>=2.0.0
 
 # User identification and session management
 user-agents>=2.2.0
+
+# Realistic weather simulation (no API keys required)
+# Weather data is simulated based on location, time, and seasonal patterns
+
+# Simulated weather service for contextual recommendations
+# No API keys required - uses realistic weather simulation based on location and time
